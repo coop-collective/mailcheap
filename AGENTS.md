@@ -13,11 +13,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - This fork runs the Next.js API surface on vinext/Vite in Cloudflare Workers.
 - Use native D1, R2 and Queues bindings for data, files and background jobs.
   Do not reintroduce MongoDB, Mongoose, Upstash or Vercel Blob dependencies.
-- Keep Amazon SES for newsletter and transactional delivery. Use the Workers-safe
+- Keep Amazon SES for newsletter and subscriber lifecycle delivery. Use the Workers-safe
   signed HTTPS transport and verify SES event notifications from the allowlisted
-  SNS topic. Do not replace SES with Cloudflare Email Sending or add the AWS SDK.
+  SNS topic. The separate `/api/v1/emails` transactional endpoint uses Cloudflare
+  Email Service through its native binding, with its own enable switch and sender.
+  Preserve both providers; do not add the AWS SDK.
 - Preserve campaigns, welcome emails, custom confirmations and re-engagement
-  flows. Sending remains explicitly controlled by SENDING_ENABLED and SES quotas.
+  flows. These SES sends remain controlled by SENDING_ENABLED and SES quotas;
+  the Cloudflare API uses TRANSACTIONAL_EMAIL_ENABLED independently.
 - Preserve signed-link IDs, suppression behavior, atomic send claims and ambiguous
   delivery handling when adapting upstream updates.
 - Keep credentials out of source. The subscription-authenticated Codex runner

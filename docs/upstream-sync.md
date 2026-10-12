@@ -35,8 +35,9 @@ a controller repository, sign in, register a runner, or publish any changes.
 
 Changes to automation, scripts, agent instructions, symlinks and submodules are
 blocked. A batch requiring such changes needs a manual adaptation. The app keeps
-vinext/Workers, D1, R2 and Queues/Cron, with Amazon SES for campaign and
-transactional email and a signature-verified SNS event webhook. The prompt
+vinext/Workers, D1, R2 and Queues/Cron, with Amazon SES for campaigns and
+subscriber lifecycle emails and a signature-verified SNS event webhook. A separate
+transactional API uses the native Cloudflare Email Service binding. The prompt
 preserves those email flows and the Workers-safe signed HTTPS transport while
 forbidding the AWS SDK, MongoDB, Upstash and Vercel Blob dependencies. SES/SNS are
 intentional exceptions to the Cloudflare infrastructure migration.

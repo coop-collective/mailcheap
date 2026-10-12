@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { environmentFile, readEnvironment, readConfig, SECRET_KEYS, SETTING_KEYS, PLACEHOLDER_ID } from './setup-common.mjs';
+import { normalizeEmail } from '../lib/validation.js';
 
 export const RESOURCE_KEYS = ['CLOUDFLARE_ACCOUNT_ID', 'WORKER_NAME', 'D1_DATABASE_ID', 'D1_DATABASE_NAME', 'R2_ENABLED', 'R2_BUCKET_NAME', 'EMAIL_QUEUE_NAME', 'EMAIL_DEAD_LETTER_QUEUE_NAME'];
 const PUBLIC_KEYS = ['APP_URL', 'SENDING_ENABLED', ...SETTING_KEYS];
-const ENV_KEYS = [...RESOURCE_KEYS, ...PUBLIC_KEYS, ...SECRET_KEYS, 'CLOUDFLARE_API_TOKEN', 'LOCAL_APP_URL', 'LOCAL_SENDING_ENABLED'];
+const ENV_KEYS = [...RESOURCE_KEYS, ...PUBLIC_KEYS, ...SECRET_KEYS, 'CLOUDFLARE_API_TOKEN', 'LOCAL_APP_URL', 'LOCAL_SENDING_ENABLED', 'LOCAL_TRANSACTIONAL_EMAIL_ENABLED'];
 
 export function projectEnvironment(root, requested) {
   const file = environmentFile(root, requested || process.env.MAILCHEAP_ENV_FILE);
@@ -48,6 +49,27 @@ export function resolveConfig(base, values, { local = false } = {}) {
     config.vars.SENDING_ENABLED = values.LOCAL_SENDING_ENABLED || 'false';
   }
   if (!['true', 'false'].includes(config.vars.SENDING_ENABLED)) throw new Error('SENDING_ENABLED must be true or false.');
+  const transactionalEnabled = config.vars.TRANSACTIONAL_EMAIL_ENABLED ?? 'false';
+  const localTransactionalEnabled = values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED ?? 'false';
+  if (!['true', 'false'].includes(transactionalEnabled)) throw new Error('TRANSACTIONAL_EMAIL_ENABLED must be true or false.');
+  if (!['true', 'false'].includes(localTransactionalEnabled)) throw new Error('LOCAL_TRANSACTIONAL_EMAIL_ENABLED must be true or false.');
+  const useTransactionalEmail = local ? localTransactionalEnabled === 'true' : transactionalEnabled === 'true';
+  config.vars.TRANSACTIONAL_EMAIL_ENABLED = String(useTransactionalEmail);
+  let sender = config.vars.TRANSACTIONAL_EMAIL_FROM ?? '';
+  if (useTransactionalEmail) {
+    const normalizedSender = normalizeEmail(sender);
+    if (!sender || sender.trim() !== sender || !normalizedSender) {
+      throw new Error('Set TRANSACTIONAL_EMAIL_FROM to one bare email address when transactional email is enabled.');
+    }
+    sender = normalizedSender;
+    config.vars.TRANSACTIONAL_EMAIL_FROM = sender;
+  }
+  // Keep optional Cloudflare Email Service access out of disabled deployments.
+  // Preserve unrelated bindings if this project later declares more send_email entries.
+  config.send_email = (config.send_email || []).filter(item => item.name !== 'TRANSACTIONAL_EMAIL');
+  if (useTransactionalEmail) {
+    config.send_email.push({ name: 'TRANSACTIONAL_EMAIL', allowed_sender_addresses: [sender] });
+  }
   // Even an accidentally copied secret in the template must not enter a build.
   for (const key of [...SECRET_KEYS, ...RESOURCE_KEYS, 'CLOUDFLARE_API_TOKEN']) delete config.vars[key];
   return config;
@@ -88,7 +110,12 @@ export function writeRuntimeConfig(root, config, values, { local = false } = {})
   fs.writeFileSync(configPath, JSON.stringify(generated, null, 2), { mode: 0o600 });
   // Use a filtered .dev.vars next to the generated config so legacy root
   // .dev.vars cannot shadow .env, or bind deployment API tokens into the app.
-  const devValues = { ...config.vars, APP_URL: values.LOCAL_APP_URL || 'http://localhost:3000', SENDING_ENABLED: values.LOCAL_SENDING_ENABLED || 'false' };
+  const devValues = {
+    ...config.vars,
+    APP_URL: values.LOCAL_APP_URL || 'http://localhost:3000',
+    SENDING_ENABLED: values.LOCAL_SENDING_ENABLED || 'false',
+    TRANSACTIONAL_EMAIL_ENABLED: values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED === 'true' ? 'true' : 'false',
+  };
   for (const key of SECRET_KEYS) if (values[key]) devValues[key] = values[key];
   const varsPath = path.join(directory, '.dev.vars');
   fs.writeFileSync(varsPath, Object.entries(devValues).map(([key, value]) => `${key}=${dotenvValue(value)}`).join('\n') + '\n', { mode: 0o600 });

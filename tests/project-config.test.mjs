@@ -81,6 +81,8 @@ test('private resource IDs, names, and public settings override the template wit
     APP_URL: 'https://newsletter.example.test',
     SENDING_ENABLED: 'true',
     ...Object.fromEntries(SETTING_KEYS.map(key => [key, `private-${key.toLowerCase()}`])),
+    TRANSACTIONAL_EMAIL_ENABLED: 'true',
+    TRANSACTIONAL_EMAIL_FROM: 'private@example.test',
   };
 
   const config = resolveConfig(base, values);

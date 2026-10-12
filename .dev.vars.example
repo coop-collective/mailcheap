@@ -9,6 +9,11 @@ APP_URL=
 LOCAL_APP_URL=http://localhost:3000
 SENDING_ENABLED=false
 LOCAL_SENDING_ENABLED=false
+# Cloudflare Email Service. Verify the sender address/domain in Cloudflare first.
+TRANSACTIONAL_EMAIL_ENABLED=false
+TRANSACTIONAL_EMAIL_FROM=
+# Local development has its own explicit opt-in and defaults off.
+LOCAL_TRANSACTIONAL_EMAIL_ENABLED=false
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=

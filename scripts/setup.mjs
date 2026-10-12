@@ -43,6 +43,9 @@ async function main() {
   const defaults = Object.fromEntries(SETTING_KEYS.filter(key => initial[key] !== undefined || base.vars?.[key] !== undefined).map(key => [key, initial[key] ?? base.vars[key]]));
   const prepared = prepareEnvironment(root, { file, email, defaults });
   const values = { ...initial, ...prepared.values };
+  if (flags.local ? values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED === 'true' : values.TRANSACTIONAL_EMAIL_ENABLED === 'true') {
+    console.log(`Transactional email is enabled; verify ${values.TRANSACTIONAL_EMAIL_FROM} in Cloudflare Email Service before sending.`);
+  }
   if (flags.name) values.WORKER_NAME = flags.name;
   if (flags.account) values.CLOUDFLARE_ACCOUNT_ID = flags.account;
   if (flags['app-url']) values.APP_URL = flags['app-url'];

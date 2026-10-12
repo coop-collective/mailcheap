@@ -9,6 +9,7 @@ const worker = {
 	async scheduled(event, env, ctx) {
 		await handleScheduled(event, env, ctx);
 		await env.DB.prepare("DELETE FROM rate_limits WHERE expires_at < ?").bind(Date.now()).run();
+		await env.DB.prepare("DELETE FROM transactional_email_requests WHERE expires_at < ?").bind(Date.now()).run();
 	},
 };
 

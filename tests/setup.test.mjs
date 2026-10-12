@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { environmentFile, prepareEnvironment, readEnvironment, deploymentSecrets, readConfig, validateDeployConfig, publicAppUrl, PLACEHOLDER_ID } from '../scripts/setup-common.mjs';
+import { resolveConfig, writeRuntimeConfig } from '../scripts/project-config.mjs';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url));
 function fixture(t) {
@@ -16,8 +17,13 @@ function fixture(t) {
 
 test('local setup generates private credentials and reruns preserve every existing secret', t => {
   const root = fixture(t);
-  const first = prepareEnvironment(root, { email: 'admin@example.test' });
+  const first = prepareEnvironment(root, { email: 'admin@example.test', defaults: {
+    TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: 'no-reply@example.test', LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'true',
+  } });
   assert.equal(first.values.SENDING_ENABLED, 'false');
+  assert.equal(first.values.TRANSACTIONAL_EMAIL_ENABLED, 'true');
+  assert.equal(first.values.TRANSACTIONAL_EMAIL_FROM, 'no-reply@example.test');
+  assert.equal(first.values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED, 'true');
   assert.ok(first.values.ADMIN_PASSWORD.length >= 24);
   assert.ok(first.values.SESSION_SECRET.length >= 48);
   assert.equal(fs.statSync(first.file).mode & 0o777, 0o600);
@@ -82,12 +88,64 @@ test('live deployment rejects placeholders, localhost, and sending without SES f
   for (const url of ['https://localhost', 'https://127.0.0.1', 'https://user:pass@example.com', 'https://example.com/path']) assert.throws(() => publicAppUrl(url));
 });
 
+test('transactional email binding is opt-in, sender restricted, and preserves other email bindings', () => {
+  const base = readConfig(sourceRoot).config;
+  base.send_email.push({ name: 'OTHER_EMAIL', allowed_sender_addresses: ['other@example.test'] });
+  const disabled = resolveConfig(base, {});
+  assert.deepEqual(disabled.send_email, [{ name: 'OTHER_EMAIL', allowed_sender_addresses: ['other@example.test'] }]);
+  assert.equal(disabled.vars.TRANSACTIONAL_EMAIL_ENABLED, 'false');
+
+  const enabled = resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: 'no-reply@example.test' });
+  assert.equal(enabled.vars.TRANSACTIONAL_EMAIL_ENABLED, 'true');
+  assert.deepEqual(enabled.send_email, [
+    { name: 'OTHER_EMAIL', allowed_sender_addresses: ['other@example.test'] },
+    { name: 'TRANSACTIONAL_EMAIL', allowed_sender_addresses: ['no-reply@example.test'] },
+  ]);
+});
+
+test('local transactional email requires a separate explicit opt-in from production', () => {
+  const base = readConfig(sourceRoot).config;
+  const productionEnabled = resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: 'no-reply@example.test' }, { local: true });
+  assert.equal(productionEnabled.vars.TRANSACTIONAL_EMAIL_ENABLED, 'false');
+  assert.deepEqual(productionEnabled.send_email, []);
+
+  const localEnabled = resolveConfig(base, { TRANSACTIONAL_EMAIL_FROM: 'no-reply@example.test', LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'true' }, { local: true });
+  assert.equal(localEnabled.vars.TRANSACTIONAL_EMAIL_ENABLED, 'true');
+  assert.deepEqual(localEnabled.send_email, [{ name: 'TRANSACTIONAL_EMAIL', allowed_sender_addresses: ['no-reply@example.test'] }]);
+});
+
+test('generated local vars always use the local transactional switch and sender values are canonical', t => {
+  const root = fixture(t);
+  const base = readConfig(sourceRoot).config;
+  const values = { TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: 'No-Reply@Example.Test' };
+  const production = resolveConfig(base, values);
+  assert.equal(production.vars.TRANSACTIONAL_EMAIL_FROM, 'no-reply@example.test');
+  assert.deepEqual(production.send_email, [{ name: 'TRANSACTIONAL_EMAIL', allowed_sender_addresses: ['no-reply@example.test'] }]);
+
+  writeRuntimeConfig(root, production, values);
+  const devVarsPath = path.join(root, '.wrangler/mailcheap/production/.dev.vars');
+  assert.equal(readEnvironment(devVarsPath).TRANSACTIONAL_EMAIL_ENABLED, 'false');
+
+  writeRuntimeConfig(root, production, { ...values, LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'true' });
+  assert.equal(readEnvironment(devVarsPath).TRANSACTIONAL_EMAIL_ENABLED, 'true');
+});
+
+test('transactional email configuration rejects invalid switches and non-single sender addresses', () => {
+  const base = readConfig(sourceRoot).config;
+  for (const value of ['yes', '', 'TRUE']) assert.throws(() => resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: value }), /TRANSACTIONAL_EMAIL_ENABLED must be true or false/);
+  for (const value of ['yes', '', 'TRUE']) assert.throws(() => resolveConfig(base, { LOCAL_TRANSACTIONAL_EMAIL_ENABLED: value }, { local: true }), /LOCAL_TRANSACTIONAL_EMAIL_ENABLED must be true or false/);
+  assert.throws(() => resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: 'true' }), /one bare email address/);
+  for (const sender of ['Name <no-reply@example.test>', 'one@example.test,two@example.test', ' no-reply@example.test', 'not-an-email']) {
+    assert.throws(() => resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: sender }), /one bare email address/);
+  }
+});
+
 function cliFixture(t) {
   const root = fixture(t);
   fs.mkdirSync(path.join(root, 'scripts'));
   fs.mkdirSync(path.join(root, 'lib'));
   for (const file of ['setup.mjs', 'setup-common.mjs', 'setup-cloudflare.mjs', 'project-config.mjs', 'deploy.mjs']) fs.copyFileSync(path.join(sourceRoot, 'scripts', file), path.join(root, 'scripts', file));
-  fs.copyFileSync(path.join(sourceRoot, 'lib/config.js'), path.join(root, 'lib/config.js'));
+  for (const file of ['config.js', 'validation.js']) fs.copyFileSync(path.join(sourceRoot, 'lib', file), path.join(root, 'lib', file));
   fs.copyFileSync(path.join(sourceRoot, 'wrangler.jsonc'), path.join(root, 'wrangler.jsonc'));
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8')).scripts }));
   fs.mkdirSync(path.join(root, 'node_modules/wrangler/bin'), { recursive: true });

@@ -2,7 +2,7 @@
 
 A Cloudflare-native fork of [marclou/mailcheap](https://github.com/marclou/mailcheap). The existing React dashboard, editor, contacts, API, tracking links and public archives run on **vinext in Cloudflare Workers**.
 
-MongoDB/Mongoose, Upstash QStash/Redis and Vercel Blob are removed. Application records live in Cloudflare D1; there is no separately hosted database to operate. Amazon SES remains the email provider, called from Workers through signed HTTPS without the AWS SDK. SNS delivers authenticated email events to the Worker.
+MongoDB/Mongoose, Upstash QStash/Redis and Vercel Blob are removed. Application records live in Cloudflare D1; there is no separately hosted database to operate. Amazon SES handles newsletters through signed HTTPS without the AWS SDK. SNS delivers authenticated SES email events to the Worker. An optional [transactional email API](#transactional-email-api) uses Cloudflare Email Service for messages such as verification codes, password resets and receipts.
 
 Newsletter campaigns, welcome emails, custom opt-in confirmations, re-engagement messages and test sends use SES. Sending starts only after `SENDING_ENABLED=true` and the SES account/domain checks pass.
 
@@ -26,8 +26,8 @@ Setup walks through your Cloudflare account and resources and generates a privat
 `.env`, credentials, resource IDs and generated configuration stay ignored by Git.
 For local development only, use `pnpm run setup --local` followed by `pnpm dev`.
 
-Sending starts disabled. Complete [SES setup](#amazon-ses-setup) before enabling
-email. See [deployment](#deploy) for restoring an existing installation, custom
+Sending starts disabled. Complete [SES setup](#amazon-ses-setup) for newsletters
+or [Cloudflare Email Service setup](#cloudflare-transactional-email-setup) for the transactional API. See [deployment](#deploy) for restoring an existing installation, custom
 domains and a dry run, and [upstream updates](#upstream-updates-with-codex) for the
 optional private Codex runner.
 
@@ -38,7 +38,8 @@ optional private Codex runner.
 | React, Server Components, actions, API and archive routes | Workers + vinext |
 | Contacts, newsletters, campaigns, messages, events, suppressions, keys | D1, with migrations and indexed SQL queries |
 | Editor image uploads and permanent public image URLs | R2 through `/media/images/*` |
-| Campaign and transactional email | Amazon SES v2 API over signed HTTPS |
+| Campaigns and subscriber lifecycle emails | Amazon SES v2 API over signed HTTPS |
+| Transactional email API for other apps | Optional Cloudflare Email Service binding |
 | Send jobs | Cloudflare Queues |
 | Delivery, bounce and complaint events | Amazon SNS → signature-verified Worker webhook |
 | Scheduled work, interrupted-send recovery and expiration cleanup | Cron Trigger |
@@ -54,7 +55,8 @@ The image editor resizes uploads before storage. No separate image resizing serv
 | Workers, D1 and admin credentials | Always; D1 replaces the separately hosted database |
 | Queues and Cron | Sending, scheduling and recovery; included in the default setup |
 | R2 | Uploading and serving images; use `--skip-r2` if your images are hosted elsewhere |
-| SES credentials and SNS feedback | Sending email; the dashboard, imports, drafts and archives work before configuring them |
+| SES credentials and SNS feedback | Sending campaigns and subscriber lifecycle emails |
+| Cloudflare Email Service and an onboarded sender domain | Sending through the optional transactional API; configured separately from SES |
 | `ALERT_FROM` | Sending admin email notifications |
 | Custom app/archive domains | Using your own domain instead of the default `workers.dev` address |
 | Codex runner and private controller | Automatically adapting upstream updates |
@@ -111,7 +113,7 @@ pnpm run setup --local
 pnpm run setup --skip-r2
 ```
 
-`pnpm deploy` reads the private environment file, builds the app, applies pending **remote** D1 migrations, and deploys the Worker code and runtime secrets. Generated build output lives under ignored `dist/`. Only an allowlist of runtime secrets is uploaded; the Cloudflare token is never included in the Worker runtime. `SENDING_ENABLED` controls production sending and defaults to `false`. Keep it off until SES verification and SNS are ready. Existing Worker secrets absent from the environment file are retained by Wrangler; to revoke one, remove it locally and use `pnpm cf secret delete NAME`.
+`pnpm deploy` reads the private environment file, builds the app, applies pending **remote** D1 migrations, and deploys the Worker code and runtime secrets. Generated build output lives under ignored `dist/`. Only an allowlist of runtime secrets is uploaded; the Cloudflare token is never included in the Worker runtime. `SENDING_ENABLED` controls SES sending and defaults to `false`. Keep it off until SES verification and SNS are ready. `TRANSACTIONAL_EMAIL_ENABLED` separately controls the Cloudflare API and also defaults to `false`. Existing Worker secrets absent from the environment file are retained by Wrangler; to revoke one, remove it locally and use `pnpm cf secret delete NAME`.
 
 `APP_URL` is the production public URL. Region, SES feedback, send-rate, archive-host, alert and other production variables can be configured in `.env`; they override the public Wrangler template during deployment. No generated values are written back to tracked Wrangler files.
 
@@ -131,7 +133,7 @@ SES identity verification, DNS records, configuration-set event delivery and SNS
 
 ### Amazon SES setup
 
-Use the same AWS region for the SES identity, configuration set and SNS topic. Set `AWS_REGION` in `.env` (default `us-east-1`). SES supports both newsletters and transactional mail; Cloudflare Email Sending is not used by this fork.
+Use the same AWS region for the SES identity, configuration set and SNS topic. Set `AWS_REGION` in `.env` (default `us-east-1`). Campaigns and subscriber lifecycle messages use SES; the optional `/api/v1/emails` endpoint uses Cloudflare Email Service.
 
 1. Verify a sending domain in SES, add its Easy DKIM DNS records, and configure a custom MAIL FROM domain for SPF alignment. Add a DMARC record for the sending domain. The Domains page reads live SES verification, DKIM and return-path status and shows the DNS records.
 2. Request production access for the SES account if it is in the sandbox, and check its sending quota. The overview shows the account's sandbox/production status, health, daily quota and maximum rate.
@@ -145,6 +147,26 @@ Campaigns, welcome emails, custom confirmations and list-cleanup messages retain
 
 A message is atomically claimed in D1 before delivery. Explicit rate-limit rejection may retry. An ambiguous network/provider result becomes `uncertain` rather than being blindly resent; review SES events before manual recovery. Interrupted claims are marked uncertain after 15 minutes. Monitor the send dead-letter queue and investigate before replaying jobs. There is no claim of exactly-once delivery across D1 and SES.
 
+### Cloudflare transactional email setup
+
+This optional addition sends individual transactional messages for your other apps. It uses the native Workers binding and needs no Cloudflare API token in the application runtime. Newsletter campaigns continue to use SES.
+
+1. Use a Workers Paid plan and a domain managed with Cloudflare DNS. In **Email Service → Email Sending**, onboard your sending domain and complete DNS verification. Follow [Cloudflare's domain setup](https://developers.cloudflare.com/email-service/get-started/send-emails/); `pnpm setup` does not change DNS or onboard email domains.
+2. Set these values in your private `.env`:
+
+   ```dotenv
+   TRANSACTIONAL_EMAIL_ENABLED=true
+   TRANSACTIONAL_EMAIL_FROM=notifications@your-verified-domain.com
+   LOCAL_TRANSACTIONAL_EMAIL_ENABLED=false
+   ```
+
+3. Run `pnpm deploy`. It applies the new D1 idempotency migration and adds a `TRANSACTIONAL_EMAIL` binding restricted to that sender. Disabled installations have no transactional email binding. SES credentials are unnecessary for this endpoint; `SENDING_ENABLED` can remain `false` if you only use the transactional API.
+4. Create a named key for the calling app on **API keys**, store it in that app's backend environment, and call the [endpoint below](#transactional-email-api). Existing keys also gain access when you enable it: keys are not scoped to individual operations or newsletters.
+
+One sender address is configured per installation. Check delivery status and Cloudflare suppressions in **Email Service**. These messages do not create newsletter contacts, use newsletter unsubscribe preferences, appear in campaign reports, or use the SES/SNS tracking flow. They are for service messages triggered by your app, not newsletter or marketing campaigns. Cloudflare's [Email Service plan requirements](https://developers.cloudflare.com/email-service/) and [sending charges](https://developers.cloudflare.com/email-service/platform/pricing/) apply separately from SES.
+
+For local simulation, set `LOCAL_TRANSACTIONAL_EMAIL_ENABLED=true` and a `TRANSACTIONAL_EMAIL_FROM` address, then run `pnpm run db:migrate:local` and `pnpm dev`. Wrangler simulates the binding without sending real mail; do not enable a remote email binding for this test. Production enabling alone never enables local sending. A built `pnpm start` preview also requires the binding to have been enabled at build time; use `pnpm dev` for local-only setup.
+
 ### Configuration
 
 | Variable | Purpose |
@@ -152,7 +174,10 @@ A message is atomically claimed in D1 before delivery. Explicit rate-limit rejec
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SESSION_SECRET` | Required secrets for the dashboard and signed links |
 | `APP_URL` | Public HTTPS app URL used in emails, archives and media URLs |
 | `LOCAL_APP_URL`, `LOCAL_SENDING_ENABLED` | Local public URL and local sending switch; sending defaults to `false` |
-| `SENDING_ENABLED` | Exact `true` enables campaign and transactional email |
+| `SENDING_ENABLED` | Exact `true` enables SES campaigns and subscriber lifecycle emails |
+| `TRANSACTIONAL_EMAIL_ENABLED` | Exact `true` enables the Cloudflare transactional API; default `false` |
+| `TRANSACTIONAL_EMAIL_FROM` | One bare sender address on a domain onboarded to Cloudflare Email Sending |
+| `LOCAL_TRANSACTIONAL_EMAIL_ENABLED` | Local simulation switch, independent of production; default `false` |
 | `CLOUDFLARE_ACCOUNT_ID`, `WORKER_NAME` | Cloudflare account and Worker to reuse or create |
 | `D1_DATABASE_ID`, `D1_DATABASE_NAME` | D1 database to reuse or create |
 | `R2_ENABLED`, `R2_BUCKET_NAME` | Optional R2 storage; enabled by default |
@@ -168,7 +193,7 @@ A message is atomically claimed in D1 before delivery. Explicit rate-limit rejec
 
 The legacy aliases `SES_REGION`, `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` and `SES_SESSION_TOKEN` are also accepted and take precedence over their AWS equivalents. Use one consistent credential pair. Workers do not read a local AWS credentials file or assume an EC2 role.
 
-Resource bindings are generated from the private IDs and names for deployment: `DB`, optional `IMAGES` (R2), `ASSETS`, and `EMAIL_QUEUE`. These are bindings, not connection-string environment variables. Production rate limiting trusts only `CF-Connecting-IP` set by Cloudflare.
+Resource bindings are generated from private configuration for deployment: `DB`, optional `IMAGES` (R2), `ASSETS`, `EMAIL_QUEUE`, and optional `TRANSACTIONAL_EMAIL`. These are bindings, not connection-string environment variables. Production rate limiting trusts only `CF-Connecting-IP` set by Cloudflare.
 
 ## Existing data
 
@@ -198,7 +223,7 @@ The controller detects new upstream commits, asks Codex to adapt the delta to th
 ## API
 
 
-Create a key on the **API keys** page and send it as `Authorization: Bearer <key>`.
+Create a key on the **API keys** page and send it as `Authorization: Bearer <key>`. Keep keys in the calling app's backend; never embed them in browser or mobile code.
 
 **Add a contact**: `POST /api/v1/contacts`
 
@@ -217,6 +242,58 @@ curl -X POST https://<your-app>/api/v1/contacts \
 **Create a draft**: `POST /api/v1/campaigns` with `newsletter`, `subject`, `previewText` (optional), `html` or `markdown`, and `archiveSlug` (optional). Answers `201` with the draft's id and dashboard URL. Sending stays a click in the dashboard.
 
 **List sent issues**: `GET /api/v1/campaigns?newsletter=<slug>` returns each issue's id, subject, preview text, archive URL and send date.
+
+### Transactional email API
+
+**Send one transactional message**: `POST /api/v1/emails`. Complete [Cloudflare setup](#cloudflare-transactional-email-setup) first. This endpoint uses the same dashboard-generated bearer keys as the other API routes.
+
+```sh
+curl https://<your-app>/api/v1/emails \
+  -H "Authorization: Bearer $MAILCHEAP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order-123-receipt" \
+  -d '{
+    "to": "customer@example.com",
+    "subject": "Your order confirmation",
+    "text": "We received order 123. Thank you!",
+    "html": "<p>We received order <strong>123</strong>. Thank you!</p>",
+    "replyTo": "support@your-verified-domain.com"
+  }'
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `to` | Yes | One bare recipient email address |
+| `subject` | Yes | 1–200 characters, without control characters |
+| `text` | Yes | Nonempty plain-text message |
+| `html` | No | Nonempty HTML version accompanying the text |
+| `replyTo` | No | One bare reply-to email address |
+
+The sender comes from `TRANSACTIONAL_EMAIL_FROM`. Recipient arrays, custom `from`, attachments, CC/BCC, arbitrary headers and other fields are rejected. The entire JSON body is limited to 128 KiB. The endpoint enforces 100 requests per minute per API key and 1,000 per hour across the installation, using D1 counters. Replays also count toward these limits; Cloudflare's account quotas apply in addition.
+
+Cloudflare acceptance returns **202**:
+
+```json
+{ "id": "<cloudflare-message-id>", "status": "accepted", "provider": "cloudflare" }
+```
+
+Acceptance does not confirm inbox delivery. The response ID can be used to investigate the message in Cloudflare Email Service logs. The endpoint awaits Cloudflare's response; it does not queue background delivery or automatically retry.
+
+Send an optional **`Idempotency-Key`** for retries: 1–128 letters, numbers, dots, underscores, colons or hyphens. Repeating the same key and normalized message with the same API key within 24 hours returns the recorded outcome with `Idempotency-Replayed: true`, including recorded provider rejections. Changing the message returns **409**. An in-flight or interrupted send also returns **409** until its result is recorded; it is never automatically resent. Use a non-sensitive identifier because the key is stored alongside the message hash and result; the message body and recipient are not stored in this table. Keys expire after 24 hours, after which reuse can send again.
+
+Errors return `{ "error": "...", "code": "..." }`:
+
+| Status | Meaning |
+| --- | --- |
+| `400` / `413` / `415` | Invalid input, oversized body, or wrong content type |
+| `401` | Missing, invalid or revoked API key |
+| `409` | Idempotency conflict, send in progress, or an interrupted send with an unknown outcome |
+| `422` | Cloudflare rejected the message or recipient, including suppressed recipients |
+| `429` | App rate limit or Cloudflare sending quota reached |
+| `502` | Unknown delivery outcome; inspect Cloudflare logs before sending again |
+| `503` | Disabled sending, missing configuration, sender verification or storage/service failure |
+
+For network timeouts, retry with the **same** idempotency key to retrieve the outcome without issuing another send. After `delivery_unknown` or `send_in_progress_or_unknown`, investigate before using a new key. Without an idempotency key, every call is a new send and retries can duplicate emails. There is no exactly-once delivery guarantee across D1 and Cloudflare Email Service. Local tests cover the API with D1 and a simulated Workers email binding; live delivery requires your configured account and verified domain.
 
 ## License
 

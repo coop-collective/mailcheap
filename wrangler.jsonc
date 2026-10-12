@@ -33,10 +33,14 @@
       }
     ]
   },
+  // The private project config adds this binding only when transactional email is enabled.
+  "send_email": [],
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "APP_URL": "http://localhost:3000",
     "SENDING_ENABLED": "false",
+    "TRANSACTIONAL_EMAIL_ENABLED": "false",
+    "TRANSACTIONAL_EMAIL_FROM": "",
     "AWS_REGION": "us-east-1",
     "SES_CONFIGURATION_SET": "mailcheap",
     "SES_SNS_TOPIC_ARN": "",

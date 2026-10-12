@@ -10,14 +10,17 @@ Preserve the fork's architecture:
 - React/Next routes run through vinext on Cloudflare Workers.
 - Application data belongs in Cloudflare D1. Keep SQL migrations and data access
   compatible; never restore MongoDB or Mongoose.
-- Email uses Amazon SES through the Workers-safe signed HTTPS transport. Keep
+- Campaign and subscriber lifecycle email uses the Workers-safe SES HTTPS transport. Keep
   campaigns, custom confirmations, welcome emails and re-engagement flows.
   Preserve the authenticated SNS delivery-event webhook and exact topic allowlist.
   Keep SENDING_ENABLED and SES quota checks; do not change the account pricing plan.
+- The separate /api/v1/emails transactional API uses the native Cloudflare Email
+  Service binding. Preserve its independent enable switch, fixed sender, API-key
+  authentication, rate limits and D1 idempotency. Keep this addition alongside SES.
 - Background jobs use Cloudflare Queues and Cron. Rate limiting uses Workers
   bindings. Images/files use R2. Never restore the AWS SDK, Upstash or Vercel Blob.
   SES/SNS are intentional provider dependencies; other app infrastructure stays
-  on Cloudflare. Do not replace SES with Cloudflare Email Sending.
+  on Cloudflare. Keep SES for the existing newsletter and subscriber lifecycle flows.
 - Preserve authentication, workspace isolation, suppression/unsubscribe behavior,
   idempotency, scheduled-job semantics, secrets handling and rate limits.
 

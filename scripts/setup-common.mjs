@@ -12,7 +12,7 @@ export const SECRET_KEYS = [
   'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN',
   'SES_ACCESS_KEY_ID', 'SES_SECRET_ACCESS_KEY', 'SES_SESSION_TOKEN',
 ];
-export const SETTING_KEYS = ['AWS_REGION', 'SES_REGION', 'SES_CONFIGURATION_SET', 'SES_SNS_TOPIC_ARN', 'SEND_RATE_PER_SECOND', 'ARCHIVE_HOSTS', 'ALERT_FROM'];
+export const SETTING_KEYS = ['AWS_REGION', 'SES_REGION', 'SES_CONFIGURATION_SET', 'SES_SNS_TOPIC_ARN', 'SEND_RATE_PER_SECOND', 'ARCHIVE_HOSTS', 'ALERT_FROM', 'TRANSACTIONAL_EMAIL_ENABLED', 'TRANSACTIONAL_EMAIL_FROM'];
 
 export function readConfig(root) {
   const text = fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8');
@@ -54,7 +54,8 @@ export function prepareEnvironment(root, { file = environmentFile(root), email, 
     SESSION_SECRET: existing.SESSION_SECRET || randomBytes(48).toString('base64url'),
   };
   for (const [key, value] of Object.entries({
-    APP_URL: '', LOCAL_APP_URL: 'http://localhost:3000', SENDING_ENABLED: 'false', AWS_REGION: 'us-east-1',
+    APP_URL: '', LOCAL_APP_URL: 'http://localhost:3000', SENDING_ENABLED: 'false', LOCAL_SENDING_ENABLED: 'false',
+    LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'false', TRANSACTIONAL_EMAIL_ENABLED: 'false', TRANSACTIONAL_EMAIL_FROM: '', AWS_REGION: 'us-east-1',
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', AWS_SESSION_TOKEN: '',
     SES_CONFIGURATION_SET: 'mailcheap', SES_SNS_TOPIC_ARN: '', SEND_RATE_PER_SECOND: '1', ARCHIVE_HOSTS: '', ALERT_FROM: '',
     ...defaults,
