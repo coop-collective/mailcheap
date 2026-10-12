@@ -37,7 +37,7 @@ export default function SkeletonOverview() {
 					<SkeletonDomainList />
 				</SectionSkeleton>
 				<SectionSkeleton title="System">
-					<SkeletonSesAccount />
+					<SkeletonEmailAccount />
 				</SectionSkeleton>
 			</div>
 		</>
@@ -124,7 +124,7 @@ export function SkeletonDomainList({ rows = 3 }) {
 	);
 }
 
-export function SkeletonSesAccount() {
+export function SkeletonEmailAccount() {
 	return (
 		<div aria-hidden="true" className="overflow-hidden rounded-xl bg-card shadow-border">
 			<div className="grid grid-cols-2 gap-px bg-border/60 lg:grid-cols-4">

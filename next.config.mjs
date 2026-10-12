@@ -20,7 +20,8 @@ const SECURITY_HEADERS = [
 const nextConfig = {
 	poweredByHeader: false,
 	images: {
-		remotePatterns: [{ protocol: "https", hostname: "*.public.blob.vercel-storage.com" }],
+		// Uploads are resized in the editor before being stored in R2.
+		unoptimized: true,
 	},
 	async headers() {
 		return [{ source: "/:path*", headers: SECURITY_HEADERS }];

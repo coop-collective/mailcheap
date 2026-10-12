@@ -1,6 +1,6 @@
 "use server";
 
-import { isValidObjectId } from "mongoose";
+import { isValidObjectId } from "@/lib/d1-id";
 import { revalidatePath } from "next/cache";
 import { notifyActivity } from "@/lib/alerts";
 import { generateApiKey } from "@/lib/api-keys";

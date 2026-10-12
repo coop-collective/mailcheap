@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mailcheap",
+  "compatibility_date": "2026-10-11",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "worker/index.js",
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mailcheap",
+      // Public template only. Private .env D1_DATABASE_ID overrides this at runtime.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "mailcheap-images" }],
+  "queues": {
+    "producers": [{ "binding": "EMAIL_QUEUE", "queue": "mailcheap-email" }],
+    "consumers": [
+      {
+        "queue": "mailcheap-email",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "mailcheap-email-dead-letter"
+      }
+    ]
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "APP_URL": "http://localhost:3000",
+    "SENDING_ENABLED": "false",
+    "AWS_REGION": "us-east-1",
+    "SES_CONFIGURATION_SET": "mailcheap",
+    "SES_SNS_TOPIC_ARN": "",
+    "SEND_RATE_PER_SECOND": "1"
+  },
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  }
+}

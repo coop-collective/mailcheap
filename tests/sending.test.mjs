@@ -34,9 +34,7 @@ const campaign = {
 	markdown: "# Hello\n\nRead [this](https://example.com).",
 };
 
-function sesError(name, message = name) {
-	return Object.assign(new Error(message), { name });
-}
+
 
 test("recipient emails carry a personal unsubscribe link and one-click headers", () => {
 	const email = buildRecipientEmail({ campaign, newsletter, contact });
@@ -137,21 +135,15 @@ test("campaigns pause above the bounce or complaint limit once 100 are sent", ()
 	assert.equal(getCampaignPauseReason({ sent: 5000, bounced: 99, complained: 4 }), null);
 });
 
-test("SES errors map to retry later, pause the campaign, or fail one message", () => {
-	assert.equal(getSendErrorAction(sesError("TooManyRequestsException")), "retry");
-	assert.equal(getSendErrorAction(new Error("Sending is off (SENDING_ENABLED is not true)")), "retry");
-	assert.equal(getSendErrorAction(sesError("SendingPausedException")), "pause");
-	assert.equal(getSendErrorAction(sesError("AccountSuspendedException")), "pause");
-	assert.equal(getSendErrorAction(sesError("LimitExceededException")), "pause");
-	assert.equal(
-		getSendErrorAction(
-			sesError("MessageRejected", "Email address is not verified. The following identities failed")
-		),
-		"pause"
-	);
-	assert.equal(getSendErrorAction(sesError("MessageRejected", "Message contains a virus")), "fail");
-	assert.equal(getSendErrorAction(sesError("BadRequestException")), "fail");
-	assert.equal(getSendErrorAction(undefined), "fail");
+test("provider rejections retry safely while ambiguous delivery errors need review", () => {
+	const error = (code) => Object.assign(new Error(code), { code });
+	assert.equal(getSendErrorAction(error("TooManyRequestsException")), "retry");
+	assert.equal(getSendErrorAction(new Error("Sending is off")), "retry");
+	assert.equal(getSendErrorAction(error("MailFromDomainNotVerifiedException")), "pause");
+	assert.equal(getSendErrorAction(error("LimitExceededException")), "pause");
+	assert.equal(getSendErrorAction(error("BadRequestException")), "fail");
+	assert.equal(getSendErrorAction(error("InternalServiceErrorException")), "uncertain");
+	assert.equal(getSendErrorAction(new Error("network connection lost")), "uncertain");
 });
 
 test("send problems block incomplete or oversized emails", () => {

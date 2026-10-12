@@ -1,4 +1,4 @@
-import { Types, isValidObjectId } from "mongoose";
+import { isValidObjectId } from "@/lib/d1-id";
 import { notFound } from "next/navigation";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import FormNewsletter from "@/components/FormNewsletter";
@@ -7,7 +7,7 @@ import { cleanupTotalsPipeline } from "@/lib/cleanup";
 import { isSendingEnabled } from "@/lib/config";
 import { connectDb } from "@/lib/db";
 import { serialize } from "@/lib/serialize";
-import { listSesDomains } from "@/lib/ses";
+import { listEmailDomains } from "@/lib/email";
 import Contact from "@/models/Contact";
 import Newsletter from "@/models/Newsletter";
 
@@ -21,7 +21,7 @@ export default async function NewsletterPage({ params }) {
 	await connectDb();
 	const [newsletter, domains, cleanupTotals] = await Promise.all([
 		isNew ? null : Newsletter.findById(id).lean(),
-		listSesDomains(),
+		listEmailDomains(),
 		isNew ? null : getCleanupTotals(id),
 	]);
 	if (!isNew && !newsletter) notFound();
@@ -49,6 +49,6 @@ export default async function NewsletterPage({ params }) {
 }
 
 async function getCleanupTotals(newsletterId) {
-	const [totals] = await Contact.aggregate(cleanupTotalsPipeline(new Types.ObjectId(newsletterId)));
+	const [totals] = await Contact.aggregate(cleanupTotalsPipeline(newsletterId));
 	return { waiting: totals?.waiting ?? 0, kept: totals?.kept ?? 0, dormant: totals?.dormant ?? 0 };
 }

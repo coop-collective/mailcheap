@@ -1,49 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isLimitedInMemory, isRateLimited } from "../lib/rate-limit.js";
+import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
+import { consumeRateLimit, getClientIp, isLimitedInMemory, isRateLimited } from "../lib/rate-limit.js";
 
-delete process.env.UPSTASH_REDIS_REST_URL;
-delete process.env.UPSTASH_REDIS_REST_TOKEN;
+const LOGIN = { name: "login", limit: 3, window: "15 m", key: "203.0.113.7" };
 
-const LOGIN = { name: "test-login", limit: 3, window: "15 m" };
-
-async function countAllowed(options, attempts, limiter) {
-	let allowed = 0;
-	for (let attempt = 0; attempt < attempts; attempt += 1) if (!(await isRateLimited(options, limiter))) allowed += 1;
-	return allowed;
+function database() {
+	const sqlite = new DatabaseSync(":memory:");
+	sqlite.exec(readFileSync(new URL("../migrations/0002_rate_limits.sql", import.meta.url), "utf8"));
+	return { prepare: (sql) => ({ bind: (...args) => ({ first: async () => sqlite.prepare(sql).get(...args) }) }) };
 }
 
-test("without Redis, limits still apply, counted in memory per key", async () => {
-	const results = [];
-	for (let attempt = 0; attempt < 4; attempt += 1) results.push(await isRateLimited({ ...LOGIN, key: "203.0.113.7" }));
-	assert.deepEqual(results, [false, false, false, true]);
-	assert.equal(await isRateLimited({ ...LOGIN, key: "203.0.113.8" }), false, "other visitors keep their own count");
-	assert.equal(await isRateLimited({ ...LOGIN, name: "test-other", key: "203.0.113.7" }), false, "and other limits");
+test("D1 limits are shared by callers and reopen after expiry", async () => {
+	const db = database();
+	const now = 100_000;
+	const results = await Promise.all(Array.from({ length: 8 }, () => consumeRateLimit(db, LOGIN, now)));
+	assert.equal(results.filter((limited) => !limited).length, 3);
+	assert.equal(await consumeRateLimit(db, { ...LOGIN, key: "other" }, now), false);
+	assert.equal(await consumeRateLimit(db, { ...LOGIN, name: "other" }, now), false);
+	assert.equal(await consumeRateLimit(db, LOGIN, now + 15 * 60_000), false);
 });
 
-test("a Redis error or timeout falls back to memory instead of letting everything through", async (t) => {
+test("a D1 outage denies requests rather than bypassing login limits", async (t) => {
 	t.mock.method(console, "error", () => {});
-	const failing = { limit: async () => Promise.reject(new Error("fetch failed")) };
-	const timingOut = { limit: async () => ({ success: true, reason: "timeout" }) };
-	assert.equal(await countAllowed({ ...LOGIN, key: "198.51.100.3" }, 5, failing), 3);
-	assert.equal(await countAllowed({ ...LOGIN, key: "198.51.100.4" }, 5, timingOut), 3);
-
-	const reports = console.error.mock.calls.filter(({ arguments: [message] }) => /unavailable, counting in memory/.test(message));
-	assert.equal(reports.length, 1, "an outage is reported at most every 30 minutes, not on every request");
+	assert.equal(await isRateLimited(LOGIN, { prepare() { throw new Error("database offline"); } }), true);
 });
 
-test("Redis answers decide while it's up", async () => {
-	const allowing = { limit: async () => ({ success: true }) };
-	const refusing = { limit: async () => ({ success: false }) };
-	assert.equal(await countAllowed({ ...LOGIN, key: "198.51.100.5" }, 5, allowing), 5);
-	assert.equal(await countAllowed({ ...LOGIN, key: "198.51.100.5" }, 2, refusing), 0);
+test("trust only Cloudflare's connecting IP", () => {
+	assert.equal(getClientIp(new Headers({ "x-forwarded-for": "spoofed" })), "unknown");
+	assert.equal(getClientIp(new Headers({ "cf-connecting-ip": "203.0.113.8", "x-forwarded-for": "spoofed" })), "203.0.113.8");
 });
 
-test("memory limits open again once the window has passed", () => {
-	const limits = { name: "test-window", limit: 2, window: "10 m" };
-	const start = Date.parse("2026-10-09T12:00:00Z");
-	assert.equal(isLimitedInMemory({ ...limits, key: "a" }, start), false);
-	assert.equal(isLimitedInMemory({ ...limits, key: "a" }, start + 1000), false);
-	assert.equal(isLimitedInMemory({ ...limits, key: "a" }, start + 2000), true);
-	assert.equal(isLimitedInMemory({ ...limits, key: "a" }, start + 10 * 60_000 + 1000), false);
+test("local memory windows expire", () => {
+	assert.equal(isLimitedInMemory({ ...LOGIN, limit: 1 }, 1000), false);
+	assert.equal(isLimitedInMemory({ ...LOGIN, limit: 1 }, 1001), true);
+	assert.equal(isLimitedInMemory({ ...LOGIN, limit: 1 }, 901000), false);
 });

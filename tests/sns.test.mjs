@@ -176,7 +176,7 @@ test("certificates are cached per URL and failed downloads are retried", async (
 	});
 	const signed = signMessage(notification);
 
-	assert.equal(await verify(signed), false);
+	await assert.rejects(verify(signed), { code: "SNS_CERTIFICATE_UNAVAILABLE" });
 	assert.equal(await verify(signed), true);
 	assert.equal(await verify(signMessage(confirmation)), true);
 	assert.equal(calls, 2);

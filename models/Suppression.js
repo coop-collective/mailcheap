@@ -1,13 +1,8 @@
-import mongoose from "mongoose";
+import { defineModel } from "../lib/d1-model.js";
 
-// Global: an address that bounced or complained is never emailed again from any newsletter.
-const suppressionSchema = new mongoose.Schema(
-	{
-		email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-		reason: { type: String, enum: ["bounce", "complaint", "manual"], required: true },
-		detail: { type: String },
-	},
-	{ timestamps: true }
-);
-
-export default mongoose.models.Suppression || mongoose.model("Suppression", suppressionSchema);
+export default defineModel("suppressions", {
+	required: ["email", "reason"],
+	trim: ["email"],
+	lowercase: ["email"],
+	enums: { reason: ["bounce", "complaint", "manual"] },
+});

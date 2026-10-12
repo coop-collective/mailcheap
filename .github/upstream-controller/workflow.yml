@@ -1,0 +1,155 @@
+# COPY to .github/workflows/upstream-sync.yml in a PRIVATE controller repository.
+# Keep this file out of this public fork's .github/workflows directory.
+name: Adapt Mailcheap upstream
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      retry_closed:
+        description: Retry an upstream batch whose proposal was closed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mailcheap-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    # Public repositories and manual dispatches from non-default branches cannot
+    # send work to the persistent subscription-authenticated runner.
+    if: >-
+      github.event.repository.private == true &&
+      vars.ENABLE_UPSTREAM_SYNC == 'true' &&
+      github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      needed: ${{ steps.detect.outputs.needed }}
+      base: ${{ steps.detect.outputs.base }}
+      from: ${{ steps.detect.outputs.from }}
+      target: ${{ steps.detect.outputs.target }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: coop-collective/mailcheap
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETRY_CLOSED: ${{ inputs.retry_closed || 'false' }}
+        run: bash scripts/upstream-detect.sh
+
+  adapt:
+    needs: detect
+    if: needs.detect.outputs.needed == 'true'
+    runs-on: [self-hosted, linux, x64, mailcheap-codex]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: coop-collective/mailcheap
+          ref: ${{ needs.detect.outputs.base }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: adapt
+        env:
+          SYNC_BASE: ${{ needs.detect.outputs.base }}
+          SYNC_FROM: ${{ needs.detect.outputs.from }}
+          SYNC_TARGET: ${{ needs.detect.outputs.target }}
+          CODEX_MODEL: ${{ vars.CODEX_MODEL }}
+          CODEX_IMAGE: ${{ vars.CODEX_IMAGE || 'mailcheap-codex:0.162.1' }}
+        run: bash scripts/upstream-adapt.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate
+          path: |
+            ${{ steps.adapt.outputs.artifact }}/candidate.patch
+            ${{ steps.adapt.outputs.artifact }}/summary.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove temporary candidate
+        if: always()
+        env:
+          ARTIFACT_DIRECTORY: ${{ steps.adapt.outputs.artifact }}
+        run: |
+          if [[ "$ARTIFACT_DIRECTORY" == "$RUNNER_TEMP"/mailcheap-sync.*/result ]]; then
+            rm -rf -- "${ARTIFACT_DIRECTORY%/result}"
+          fi
+
+  validate:
+    needs: [detect, adapt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: coop-collective/mailcheap
+          ref: ${{ needs.detect.outputs.base }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Apply and check candidate using trusted guards
+        env:
+          SYNC_BASE: ${{ needs.detect.outputs.base }}
+        run: |
+          mkdir "$RUNNER_TEMP/trusted"
+          cp scripts/upstream-paths.mjs scripts/check-cloudflare.mjs "$RUNNER_TEMP/trusted/"
+          if [[ -s "$RUNNER_TEMP/candidate/candidate.patch" ]]; then
+            git apply --index "$RUNNER_TEMP/candidate/candidate.patch"
+          fi
+          node "$RUNNER_TEMP/trusted/upstream-paths.mjs" "$SYNC_BASE"
+          node "$RUNNER_TEMP/trusted/check-cloudflare.mjs"
+      # Candidate code runs only on a disposable GitHub-hosted VM with no
+      # subscription, fork-write, deployment or production credentials.
+      - run: npm ci
+      - run: node --test scripts/upstream-sync.test.mjs
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+
+  publish:
+    needs: [detect, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: coop-collective/mailcheap
+          ref: ${{ needs.detect.outputs.base }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Open reviewed draft
+        env:
+          GH_TOKEN: ${{ secrets.MAILCHEAP_SYNC_TOKEN }}
+          SYNC_BASE: ${{ needs.detect.outputs.base }}
+          SYNC_FROM: ${{ needs.detect.outputs.from }}
+          SYNC_TARGET: ${{ needs.detect.outputs.target }}
+          SYNC_ARTIFACT: ${{ runner.temp }}/candidate
+          SYNC_TRUSTED_SCRIPTS: ${{ runner.temp }}/trusted
+        run: |
+          mkdir "$SYNC_TRUSTED_SCRIPTS"
+          cp scripts/upstream-publish.sh scripts/upstream-paths.mjs scripts/check-cloudflare.mjs "$SYNC_TRUSTED_SCRIPTS/"
+          bash "$SYNC_TRUSTED_SCRIPTS/upstream-publish.sh"

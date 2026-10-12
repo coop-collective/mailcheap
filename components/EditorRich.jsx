@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import FileHandler from "@tiptap/extension-file-handler";
 import Image from "@tiptap/extension-image";
@@ -13,9 +13,40 @@ import { Callout } from "@/lib/editor-callout";
 import { IMAGE_TYPES, getDisplaySize, prepareImage, uploadImage } from "@/lib/upload-image";
 
 const MIN_HEIGHT = "min-h-[560px]";
+const UPLOADS_UNAVAILABLE = "File uploads aren’t enabled for this site. Images hosted elsewhere can still be used.";
 
 export default function EditorRich({ content, onChange }) {
+	const [uploadsEnabled, setUploadsEnabled] = useState(null);
+
+	useEffect(() => {
+		const controller = new AbortController();
+		let cancelled = false;
+		const timeout = setTimeout(() => controller.abort(), 5000);
+		fetch("/api/uploads", { signal: controller.signal, cache: "no-store" })
+			.then(async (response) => response.ok && (await response.json()).enabled === true)
+			.catch(() => false)
+			.then((enabled) => {
+				clearTimeout(timeout);
+				if (!cancelled) setUploadsEnabled(enabled);
+			});
+		return () => {
+			cancelled = true;
+			clearTimeout(timeout);
+			controller.abort();
+		};
+	}, []);
+
+	if (uploadsEnabled === null) return <div className={MIN_HEIGHT} />;
+	return <RichEditor content={content} onChange={onChange} uploadsEnabled={uploadsEnabled} />;
+}
+
+function RichEditor({ content, onChange, uploadsEnabled }) {
 	const [isEditingLink, setIsEditingLink] = useState(false);
+
+	function insertFiles(current, files, position) {
+		if (!uploadsEnabled) return void toast.error(UPLOADS_UNAVAILABLE);
+		return insertImages(current, files, position);
+	}
 	const editor = useEditor({
 		immediatelyRender: false,
 		content,
@@ -42,10 +73,16 @@ export default function EditorRich({ content, onChange }) {
 			FileHandler.configure({
 				allowedMimeTypes: IMAGE_TYPES,
 				consumePasteEvent: true,
-				onDrop: (current, files, position) => insertImages(current, files, position),
-				onPaste: (current, files) => insertImages(current, files),
+				onDrop: (current, files, position) => insertFiles(current, files, position),
+				onPaste: (current, files) => insertFiles(current, files),
 			}),
-			SlashCommand.configure({ onPickImage: pickImages }),
+			SlashCommand.configure({
+				canUploadImages: () => uploadsEnabled,
+				onPickImage: (current) => {
+					if (!uploadsEnabled) return void toast.error(UPLOADS_UNAVAILABLE);
+					pickImages(current);
+				},
+			}),
 		],
 		editorProps: {
 			attributes: { class: `prose-issue ${MIN_HEIGHT} px-5 py-5 outline-none`, "aria-label": "Content" },
@@ -63,6 +100,7 @@ export default function EditorRich({ content, onChange }) {
 
 	return (
 		<>
+			{uploadsEnabled === false && <p className="px-5 pt-3 text-xs text-muted-foreground" role="status">{UPLOADS_UNAVAILABLE}</p>}
 			<EditorContent editor={editor} />
 			<MenuFormat editor={editor} isEditingLink={isEditingLink} onEditLink={setIsEditingLink} />
 		</>

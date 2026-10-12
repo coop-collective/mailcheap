@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import geistRegularUrl from "@/assets/fonts/Geist-Regular.ttf?inline";
+import geistSemiBoldUrl from "@/assets/fonts/Geist-SemiBold.ttf?inline";
 import { ImageResponse } from "next/og";
 import { countReaders, getArchiveIssue, getArchiveNewsletter } from "@/lib/archive-data";
 import { getArchiveUrls } from "@/lib/archive-hosts";
@@ -7,24 +7,33 @@ import { getIssueDate } from "@/lib/archive-issues";
 import { SHARE_IMAGE_SIZE } from "@/lib/archive-seo";
 import { getAppUrl } from "@/lib/config";
 import { formatDate, formatNumber } from "@/lib/format";
+import { getCloudflareEnv } from "@/lib/cloudflare";
+import { readBoundedBody } from "@/lib/request-body";
 
-const [geistRegular, geistSemiBold] = await Promise.all([
-	readFile(join(process.cwd(), "assets/fonts/Geist-Regular.ttf")),
-	readFile(join(process.cwd(), "assets/fonts/Geist-SemiBold.ttf")),
-]);
 const FONTS = [
-	{ name: "Geist", data: geistRegular, weight: 400, style: "normal" },
-	{ name: "Geist", data: geistSemiBold, weight: 600, style: "normal" },
+	{ name: "Geist", data: Buffer.from(geistRegularUrl.split(",")[1], "base64"), weight: 400, style: "normal" },
+	{ name: "Geist", data: Buffer.from(geistSemiBoldUrl.split(",")[1], "base64"), weight: 600, style: "normal" },
 ];
 const COLORS = { foreground: "#0a0a0a", muted: "#737373", border: "#e5e5e5" };
 
 async function loadImage(url) {
-	const buffer = url.startsWith("/")
-		? await readFile(join(process.cwd(), "public", url)).catch(() => null)
-		: await fetch(url, { signal: AbortSignal.timeout(5000) })
-				.then((response) => (response.ok ? response.arrayBuffer() : null))
-				.then((data) => data && Buffer.from(data))
-				.catch(() => null);
+	const buffer = await (async () => {
+		const target = new URL(url, getAppUrl());
+		let response;
+		if (target.origin === new URL(getAppUrl()).origin) {
+			const { ASSETS, IMAGES } = await getCloudflareEnv();
+			if (target.pathname.startsWith("/media/images/")) {
+				const object = await IMAGES.get(target.pathname.slice("/media/".length));
+				if (!object || object.size > 4 * 1024 * 1024) return null;
+				response = new Response(object.body);
+			} else {
+				response = await ASSETS.fetch(target);
+			}
+		} else {
+			response = await fetch(target, { signal: AbortSignal.timeout(5000) });
+		}
+		return response.ok ? Buffer.from(await readBoundedBody(response, 4 * 1024 * 1024)) : null;
+	})().catch(() => null);
 	if (!buffer) return null;
 	const type = buffer[0] === 0x89 && buffer[1] === 0x50 ? "png" : buffer[0] === 0xff && buffer[1] === 0xd8 ? "jpeg" : null;
 	return type && `data:image/${type};base64,${buffer.toString("base64")}`;

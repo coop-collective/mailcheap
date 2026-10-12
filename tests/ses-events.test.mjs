@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getSesEventPlan } from "../lib/ses-event-mapping.js";
+import { getSesEventPlan } from "../lib/email-event-mapping.js";
 
 const messageId = "64f1a2b3c4d5e6f7a8b9c0d1";
 const mail = {
@@ -33,12 +33,12 @@ test("deliveries set deliveredAt once and only move sent messages forward", () =
 		sesEvent("Delivery", { timestamp: "2026-10-04T10:00:05.000Z", recipients: ["reader@example.com"] })
 	);
 	assert.equal(plan.type, "Delivery");
-	assert.equal(plan.sesMessageId, mail.messageId);
+	assert.equal(plan.providerMessageId, mail.messageId);
 	assert.equal(plan.messageId, messageId);
 	assert.equal(plan.email, "reader@example.com");
 	assert.deepEqual(plan.occurredAt, new Date("2026-10-04T10:00:05.000Z"));
 	assert.deepEqual(plan.firsts, [{ field: "deliveredAt", stat: "delivered" }]);
-	assert.deepEqual(plan.status, { to: "delivered", from: ["queued", "sent", "failed"] });
+	assert.deepEqual(plan.status, { to: "delivered", from: ["queued", "processing", "uncertain", "sent", "failed"] });
 	assert.equal(plan.suppression, null);
 	assert.equal(plan.engagement, null);
 });
@@ -62,13 +62,13 @@ test("hard bounces suppress the bounced address and mark contacts bounced", () =
 		})
 	);
 	assert.deepEqual(plan.firsts, [{ field: "bouncedAt", stat: "bounced" }]);
-	assert.deepEqual(plan.status, { to: "bounced", from: ["queued", "sent", "failed", "delivered"] });
+	assert.deepEqual(plan.status, { to: "bounced", from: ["queued", "processing", "uncertain", "sent", "failed", "delivered"] });
 	assert.deepEqual(plan.suppression, {
 		emails: ["reader@example.com"],
 		reason: "bounce",
 		detail: "Permanent/General",
 		contactStatus: "bounced",
-		contactStatusFrom: ["active", "dormant", "unsubscribed"],
+		contactStatusFrom: ["active", "pending", "dormant", "unsubscribed"],
 	});
 	assert.equal(plan.error, "Hard bounce: General, smtp; 550 5.1.1 unknown");
 });
@@ -153,7 +153,7 @@ test("clicks on unsubscribe links are not engagement", () => {
 
 test("rejects and rendering failures mark the message failed", () => {
 	const reject = getSesEventPlan(sesEvent("Reject", { reason: "Bad content" }));
-	assert.deepEqual(reject.status, { to: "failed", from: ["queued", "sent"], stat: "failed" });
+	assert.deepEqual(reject.status, { to: "failed", from: ["queued", "processing", "uncertain", "sent"], stat: "failed" });
 	assert.equal(reject.error, "Rejected by SES: Bad content");
 	assert.deepEqual(reject.occurredAt, new Date(mail.timestamp));
 
@@ -208,7 +208,7 @@ test("missing or invalid timestamps fall back to the current time", () => {
 	assert.ok(plan.occurredAt.getTime() >= before);
 
 	const withoutMail = getSesEventPlan({ eventType: "Open", open: {} });
-	assert.equal(withoutMail.sesMessageId, null);
+	assert.equal(withoutMail.providerMessageId, null);
 	assert.equal(withoutMail.email, null);
 });
 

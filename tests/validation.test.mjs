@@ -13,7 +13,7 @@ test("emails are trimmed and lowercased", () => {
 	for (const [input, expected] of accepted) assert.equal(normalizeEmail(input), expected);
 });
 
-test("addresses SES can't take as a single recipient are rejected", () => {
+test("addresses email sending can't take as a single recipient are rejected", () => {
 	const rejected = [
 		"",
 		"plain",

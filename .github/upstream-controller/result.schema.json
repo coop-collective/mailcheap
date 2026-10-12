@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "complete": { "type": "boolean" },
+    "summary": { "type": "string" },
+    "ported": { "type": "array", "items": { "type": "string" } },
+    "skipped": { "type": "array", "items": { "type": "string" } },
+    "manual": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["complete", "summary", "ported", "skipped", "manual"]
+}

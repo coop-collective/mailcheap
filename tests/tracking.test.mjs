@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getTrackingPlan } from "../lib/ses-event-mapping.js";
+import { getTrackingPlan } from "../lib/email-event-mapping.js";
 import { buildRecipientEmail } from "../lib/sending-rules.js";
 import { addTracking, getClickUrl, getOpenUrl, isLikelyScanner, readClickToken, readOpenToken } from "../lib/tracking.js";
 

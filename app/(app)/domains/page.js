@@ -8,12 +8,12 @@ import SkeletonDomains from "@/components/SkeletonDomains";
 import StateEmpty from "@/components/StateEmpty";
 import { Button } from "@/components/ui/button";
 import { rootDomain } from "@/lib/favicon";
-import { listSesDomains } from "@/lib/ses";
+import { listEmailDomains } from "@/lib/email";
 
 export const metadata = { title: "Domains" };
 
 export default function DomainsPage() {
-	const region = process.env.SES_REGION || "us-east-1";
+	const region = process.env.SES_REGION || process.env.AWS_REGION || "us-east-1";
 	return (
 		<>
 			<HeaderPage title="Domains">
@@ -44,7 +44,7 @@ export default function DomainsPage() {
 }
 
 async function ListDomains() {
-	const domains = await listSesDomains({ fresh: true });
+	const domains = await listEmailDomains({ fresh: true });
 
 	if (domains.error) {
 		return (

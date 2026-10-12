@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { Suspense } from "react";
 import Link from "next/link";
-import { Types, isValidObjectId } from "mongoose";
+import { isValidObjectId } from "@/lib/d1-id";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import AvatarContact from "@/components/AvatarContact";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
@@ -46,7 +46,7 @@ export default async function ContactsPage({ searchParams }) {
 	const newsletterMap = toNewsletterMap(newsletters);
 
 	const baseFilter = {
-		...(newsletterId && { newsletterId: new Types.ObjectId(newsletterId) }),
+		...(newsletterId && { newsletterId: newsletterId }),
 		...(query && { email: { $regex: `^${escapeRegex(query)}` } }),
 	};
 	const filter = { ...baseFilter, ...(status && { status }) };

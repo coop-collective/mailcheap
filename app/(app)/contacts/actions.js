@@ -1,6 +1,6 @@
 "use server";
 
-import { isValidObjectId } from "mongoose";
+import { isValidObjectId } from "@/lib/d1-id";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { withEngagement } from "@/lib/cleanup";

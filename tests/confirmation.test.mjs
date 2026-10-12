@@ -49,7 +49,7 @@ test("the confirmation email carries a clean link in both versions", () => {
 	assert.ok(renderEmail(content).html.includes(CONFIRM_URL_PLACEHOLDER), "the link is filled per recipient");
 });
 
-test("a newsletter's own confirmation email goes out with each subscriber's link", () => {
+test("saved custom confirmation content can still be previewed with each subscriber's link", () => {
 	const confirmation = {
 		subject: " [Action Required] Confirm your Field notes subscription ",
 		previewText: "One click and you're in.",
@@ -105,7 +105,7 @@ test("a confirmation email without its button can't be saved and never goes out"
 	assert.deepEqual(getConfirmationContent(withoutButton), builtIn, "the built-in email goes out instead");
 });
 
-test("newsletters that confirm signups send no welcome email; the others still do", () => {
+test("confirmation configuration excludes welcome content from the content helper", () => {
 	const welcome = { enabled: true, subject: "Welcome to Field notes", markdown: "Hello" };
 	assert.equal(getWelcomeContent({ requireConfirmation: true, welcome }), null);
 	assert.equal(getWelcomeContent({ requireConfirmation: false, welcome }).subject, "Welcome to Field notes");

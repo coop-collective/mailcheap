@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "migrate-to-vinext": {
+      "source": "cloudflare/vinext",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/migrate-to-vinext/SKILL.md",
+      "computedHash": "a0356b9e9d04ad991f44132643d8d4d32b4bb9da0647e23acadc82f450c1c85b"
+    }
+  }
+}

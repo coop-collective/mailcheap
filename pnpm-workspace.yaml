@@ -1,0 +1,8 @@
+overrides:
+  "satori>fflate": 0.7.5
+
+allowBuilds:
+  esbuild: true
+  fsevents: true
+  unrs-resolver: true
+  workerd: true

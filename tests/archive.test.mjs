@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getArchiveHostUrl, getArchiveSlugForHost, getArchiveUrls, parseArchiveHosts } from "../lib/archive-hosts.js";
-import { getFeedbackId } from "../lib/sending-rules.js";
 import { getShareLinks, getSocialPlatform, parseSocialLinks } from "../lib/social.js";
 
 test("app-domain archive paths move to the newsletter's own domain when it has one", () => {
@@ -77,12 +76,4 @@ test("share links carry the issue URL", () => {
 	const [x, linkedin] = getShareLinks({ url: "https://news.example.com/p/a b", text: "Hi & bye" });
 	assert.equal(x.href, "https://x.com/intent/post?text=Hi%20%26%20bye&url=https%3A%2F%2Fnews.example.com%2Fp%2Fa%20b");
 	assert.equal(linkedin.href, "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fnews.example.com%2Fp%2Fa%20b");
-});
-
-test("Feedback-ID has campaign, newsletter, kind and sender fields", () => {
-	assert.equal(
-		getFeedbackId({ campaignId: "64f1a2b3c4d5e6f7a8b9c0d1", kind: "campaign", newsletterSlug: "weekly" }),
-		"64f1a2b3c4d5e6f7a8b9c0d1:weekly:campaign:mailcheap"
-	);
-	assert.equal(getFeedbackId({ kind: "welcome", newsletterSlug: "week:ly" }), "welcome:weekly:welcome:mailcheap");
 });

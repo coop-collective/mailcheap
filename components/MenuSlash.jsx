@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 export default function MenuSlash({ items, command, ref }) {
 	const [selection, setSelection] = useState({ items, index: 0 });
-	const index = selection.items === items ? selection.index : 0;
+	const requestedIndex = selection.items === items ? selection.index : 0;
+	const index = items[requestedIndex]?.disabled ? items.findIndex((item) => !item.disabled) : requestedIndex;
 
 	function select(nextIndex) {
 		setSelection({ items, index: nextIndex });
@@ -28,10 +29,12 @@ export default function MenuSlash({ items, command, ref }) {
 
 	useImperativeHandle(ref, () => ({
 		onKeyDown({ event }) {
-			if (!items.length) return false;
+			if (!items.length || index < 0) return false;
 			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 				const step = event.key === "ArrowDown" ? 1 : -1;
-				select((index + step + items.length) % items.length);
+				let next = (index + step + items.length) % items.length;
+				while (items[next].disabled) next = (next + step + items.length) % items.length;
+				select(next);
 				return true;
 			}
 			if (event.key === "Enter" || event.key === "Tab") {
@@ -59,11 +62,12 @@ export default function MenuSlash({ items, command, ref }) {
 						role="option"
 						aria-selected={isSelected}
 						ref={isSelected ? scrollIntoView : undefined}
-						onMouseEnter={() => select(itemIndex)}
+						disabled={item.disabled}
+						onMouseEnter={() => !item.disabled && select(itemIndex)}
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={() => command(item)}
 						className={cn(
-							"flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm",
+							"flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
 							isSelected && "bg-accent text-accent-foreground"
 						)}
 					>
@@ -82,15 +86,19 @@ export default function MenuSlash({ items, command, ref }) {
 export const SlashCommand = Extension.create({
 	name: "slashCommand",
 	addOptions() {
-		return { onPickImage: () => {} };
+		return { onPickImage: () => {}, canUploadImages: () => true };
 	},
 	addProseMirrorPlugins() {
 		return [
 			Suggestion({
 				editor: this.editor,
 				char: "/",
-				items: ({ query }) => filterItems(query),
+				items: ({ query }) => filterItems(query).map((item) => ({
+					...item,
+					disabled: item.isImage && !this.options.canUploadImages(),
+				})),
 				command: ({ editor, range, props: item }) => {
+					if (item.disabled) return;
 					item.run(editor.chain().focus().deleteRange(range)).run();
 					if (item.isImage) this.options.onPickImage(editor);
 				},

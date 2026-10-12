@@ -13,7 +13,7 @@ import SkeletonCampaigns from "@/components/SkeletonCampaigns";
 import {
 	SkeletonDomainList,
 	SkeletonSends,
-	SkeletonSesAccount,
+	SkeletonEmailAccount,
 	SkeletonStats,
 	SkeletonSubscribers,
 } from "@/components/SkeletonOverview";
@@ -29,7 +29,7 @@ import { formatCompact, formatNumber, formatSigned } from "@/lib/format";
 import { NEWSLETTER_SUMMARY_FIELDS, toNewsletterMap, toNewsletterOptions } from "@/lib/newsletters";
 import { getEmailStats, getHourlySends, getSubscriberHistory } from "@/lib/overview-data";
 import { PERIOD_DAYS } from "@/lib/overview-series";
-import { getSesAccount, listSesDomains } from "@/lib/ses";
+import { getEmailAccount, listEmailDomains } from "@/lib/email";
 import { TIME_ZONE_COOKIE, resolveTimeZone, timeZoneLabel } from "@/lib/time-zone";
 import { cn } from "@/lib/utils";
 import Campaign from "@/models/Campaign";
@@ -115,8 +115,8 @@ export default async function OverviewPage({ searchParams }) {
 				</Section>
 
 				<Section title="System" stagger={5}>
-					<Suspense fallback={<SkeletonSesAccount />}>
-						<StripSesAccount />
+					<Suspense fallback={<SkeletonEmailAccount />}>
+						<StripEmailAccount />
 					</Suspense>
 				</Section>
 			</div>
@@ -210,7 +210,7 @@ async function TableRecentCampaigns({ newsletterId, newsletters }) {
 }
 
 async function SectionDomains() {
-	const domains = await listSesDomains();
+	const domains = await listEmailDomains();
 
 	if (domains.error || domains.length === 0) {
 		return (
@@ -228,8 +228,8 @@ async function SectionDomains() {
 	);
 }
 
-async function StripSesAccount() {
-	const account = await getSesAccount();
+async function StripEmailAccount() {
+	const account = await getEmailAccount();
 
 	if (account.error) {
 		return (

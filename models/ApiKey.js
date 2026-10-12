@@ -1,14 +1,6 @@
-import mongoose from "mongoose";
+import { defineModel } from "../lib/d1-model.js";
 
-const apiKeySchema = new mongoose.Schema(
-	{
-		name: { type: String, required: true, trim: true },
-		prefix: { type: String, required: true },
-		hash: { type: String, required: true, unique: true },
-		lastUsedAt: { type: Date },
-		revokedAt: { type: Date },
-	},
-	{ timestamps: true }
-);
-
-export default mongoose.models.ApiKey || mongoose.model("ApiKey", apiKeySchema);
+export default defineModel("apikeys", {
+	required: ["name", "prefix", "hash"],
+	trim: ["name"],
+});

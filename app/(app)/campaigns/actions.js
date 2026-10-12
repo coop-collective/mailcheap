@@ -1,6 +1,6 @@
 "use server";
 
-import { isValidObjectId } from "mongoose";
+import { isValidObjectId } from "@/lib/d1-id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { notifyActivity } from "@/lib/alerts";
@@ -111,7 +111,7 @@ export async function sendTestCampaign(id) {
 	return result;
 }
 
-// Sending a scheduled campaign now replaces its schedule; the job left in QStash then does nothing.
+// Sending a scheduled campaign now replaces its schedule; the Cron Trigger ignores the old schedule.
 export async function sendCampaign(id, { audienceLimit } = {}) {
 	const campaign = await findCampaign(id);
 	if (!campaign) return { error: "Campaign not found" };
