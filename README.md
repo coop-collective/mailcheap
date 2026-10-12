@@ -91,6 +91,8 @@ npm run preview
 
 `preview` serves the built Worker on Wrangler's local port (normally 8787) and explicitly shares `.wrangler/state` with development and local migrations. Set `LOCAL_APP_URL` if testing generated links. `npm run cf:types` generates binding types from Wrangler config.
 
+Test files run sequentially so local Worker startup and D1 integration tests do not compete with the archive parser's timing assertions. The parser's time limits remain enforced.
+
 Validation includes application tests with real local D1 transactions, upstream workflow fixture suites, browser flows on workerd, a production build and Wrangler packaging dry run. No live SES delivery or subscription-authenticated upstream run has been exercised. The dependency audit still reports the upstream `braces` nesting advisory through vinext/build tooling; the latest published `braces` version has no fix. The vulnerable `fflate` version pulled by Satori is overridden to its patched release. Recheck upstream advisories before production rollout.
 
 ## Deploy
