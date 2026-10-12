@@ -22,7 +22,7 @@
     "db:exec": "node -- scripts/wrangler.mjs d1 execute DB",
     "cf:types": "node -- scripts/wrangler.mjs types",
     "cf": "node -- scripts/wrangler.mjs",
-    "check": "npm test && npm run test:upstream && npm run lint && npm run check:cloudflare && npm run build",
+    "check": "pnpm test && pnpm run test:upstream && pnpm run lint && pnpm run check:cloudflare && pnpm run build",
     "test:upstream": "node --test scripts/upstream-sync.test.mjs",
     "setup": "node -- scripts/setup.mjs",
     "setup:cloudflare": "node -- scripts/setup.mjs --cloudflare"
@@ -70,10 +70,5 @@
     "tailwindcss": "^4",
     "vite": "^8.3.4",
     "wrangler": "^4.149.0"
-  },
-  "overrides": {
-    "satori": {
-      "fflate": "0.7.5"
-    }
   }
 }

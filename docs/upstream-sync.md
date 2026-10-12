@@ -5,7 +5,9 @@ The parent is [`marclou/mailcheap`](https://github.com/marclou/mailcheap), branc
 `.github/upstream-sync.json`. The initial cursor is the commit this fork started
 from, `67d13b028a6ecae9ec56d49c4b2db58019217eba`.
 
-The public fork runs ordinary checks on GitHub-hosted runners. The subscription
+The repository uses pnpm `11.13.0` and the checked-in `pnpm-lock.yaml`; CI installs
+that exact pnpm version and uses frozen-lockfile installs. The public fork runs
+ordinary checks on GitHub-hosted runners. The subscription
 automation belongs in a **separate private controller repository**. The official
 OpenAI CI authentication guide says, “Do not use this workflow for public or
 open-source repositories.” Keeping the credentialed runner and workflow private
@@ -25,7 +27,7 @@ a controller repository, sign in, register a runner, or publish any changes.
    One isolated Codex invocation adapts that batch in a fresh checkout of the
    fork. Upstream is supplied as a diff; it is never checked out on the runner.
 3. A separate disposable GitHub-hosted job installs the candidate dependencies
-   and runs the architecture guard, tests, lint and production build. It has no
+   with pnpm and runs the architecture guard, tests, lint and production build. It has no
    Codex, deployment, database or fork-write credentials.
 4. A fresh publishing job rechecks protected paths and architecture, then opens
    a draft PR on `automation/upstream-cloudflare`. Only this job receives a
@@ -98,7 +100,7 @@ sudo install -d -m 700 -o "$(id -u)" -g "$(id -g)" /var/lib/mailcheap-codex
 ```
 
 The Dockerfile pins the Codex package to the locally verified CLI version
-`0.162.1`. Its Node base uses a maintenance tag; for reproducible infrastructure,
+`0.162.1` and includes pnpm `11.13.0`. Its Node base uses a maintenance tag; for reproducible infrastructure,
 review updates and pin the base image digest in your controller's managed copy.
 The workflow uses the already-built local image with `--pull never`.
 
@@ -139,8 +141,11 @@ The Codex container explicitly removes Docker's default seccomp filter because
 it blocks the unprivileged namespaces used by Codex's Bubblewrap sandbox. Linux
 user namespaces must be available on the VM. The container remains non-root with
 all capabilities dropped, no-new-privileges and a read-only root filesystem;
-Codex still applies its own filesystem and network sandbox. Dependency installation
-uses a separate container with Docker's default seccomp filter and no credentials.
+Codex still applies its own filesystem and network sandbox. The trusted base
+dependencies are installed in a separate container with pinned pnpm, a frozen
+lockfile, lifecycle scripts disabled, Docker's default seccomp filter and no
+credentials. Candidate validation uses the same frozen pnpm lockfile on a
+disposable GitHub-hosted runner.
 
 For a credential-free image/sandbox smoke test, run:
 

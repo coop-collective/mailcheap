@@ -115,13 +115,18 @@ jobs:
           fi
           node "$RUNNER_TEMP/trusted/upstream-paths.mjs" "$SYNC_BASE"
           node "$RUNNER_TEMP/trusted/check-cloudflare.mjs"
+      - run: npm install --global --ignore-scripts pnpm@11.13.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: pnpm
       # Candidate code runs only on a disposable GitHub-hosted VM with no
       # subscription, fork-write, deployment or production credentials.
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - run: node --test scripts/upstream-sync.test.mjs
-      - run: npm test
-      - run: npm run lint
-      - run: npm run build
+      - run: pnpm test
+      - run: pnpm run lint
+      - run: pnpm run build
 
   publish:
     needs: [detect, validate]

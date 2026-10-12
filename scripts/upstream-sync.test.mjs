@@ -21,6 +21,10 @@ function write(root, name, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, value);
 }
+function pnpmLock({ packages = ['vinext@1.1.0'], alias = '' } = {}) {
+  const packageEntries = packages.map(name => `  '${name}': {}`).join('\n');
+  return `lockfileVersion: '9.0'\n\nimporters:\n  .:\n${alias ? `    dependencies:\n      mailer-alias:\n        specifier: ${alias}\n        version: 1.0.0\n` : ''}\npackages:\n${packageEntries}\n\nsnapshots:\n${packages.map(name => `  '${name}': {}`).join('\n')}\n`;
+}
 
 test('polling skips unchanged/open/closed batches and bounds new work', t => {
   const dir = fixture(t);
@@ -95,20 +99,61 @@ test('candidate guard rejects automation edits and symlinks', t => {
   assert.notEqual(guard().status, 0);
 });
 
-test('architecture guard rejects forbidden direct and locked providers', t => {
+test('architecture guard requires pnpm lock and rejects forbidden direct, transitive and aliased providers', t => {
   const dir = fixture(t);
-  const pkg = { dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } };
+  const pkg = { packageManager: 'pnpm@11.13.0', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } };
   write(dir, 'package.json', JSON.stringify(pkg));
-  write(dir, 'package-lock.json', JSON.stringify({ packages: {} }));
+  write(dir, 'pnpm-lock.yaml', pnpmLock());
   write(dir, 'wrangler.jsonc', '{ "d1_databases": [], "r2_buckets": [], "queues": {} }');
   const guard = () => spawnSync(process.execPath, [path.join(scripts, 'check-cloudflare.mjs')], { cwd: dir, encoding: 'utf8' });
   assert.equal(guard().status, 0);
-  write(dir, 'package-lock.json', JSON.stringify({ packages: { 'node_modules/@upstash/redis': {} } }));
+  fs.unlinkSync(path.join(dir, 'pnpm-lock.yaml'));
+  assert.notEqual(guard().status, 0, 'missing pnpm lockfile must fail');
+  write(dir, 'pnpm-lock.yaml', pnpmLock().replace("lockfileVersion: '9.0'", "lockfileVersion: '8.0'"));
+  assert.notEqual(guard().status, 0, 'unsupported lockfile formats must fail');
+  write(dir, 'pnpm-lock.yaml', pnpmLock({ packages: ['vinext@1.1.0', '@aws-sdk/client-s3@3.0.0'] }));
   assert.notEqual(guard().status, 0);
+  write(dir, 'pnpm-lock.yaml', pnpmLock({ alias: 'npm:@upstash/redis@^1.0.0' }));
+  assert.notEqual(guard().status, 0, 'lockfile npm aliases must fail');
+  pkg.dependencies = { vinext: '1.1.0', mailer: 'npm:@vercel/blob@^1.0.0' };
+  write(dir, 'package.json', JSON.stringify(pkg));
+  write(dir, 'pnpm-lock.yaml', pnpmLock());
+  assert.notEqual(guard().status, 0, 'direct package.json npm aliases must fail');
   write(dir, 'package-lock.json', JSON.stringify({ packages: {} }));
+  assert.notEqual(guard().status, 0, 'the retired npm lockfile must fail');
+  fs.unlinkSync(path.join(dir, 'package-lock.json'));
+  pkg.packageManager = 'pnpm@10.0.0';
+  write(dir, 'package.json', JSON.stringify(pkg));
+  assert.notEqual(guard().status, 0, 'package manager version must match the pinned installation');
+  pkg.packageManager = 'pnpm@11.13.0';
   pkg.dependencies.mongoose = '9.0.0';
   write(dir, 'package.json', JSON.stringify(pkg));
   assert.notEqual(guard().status, 0);
+});
+
+test('upstream path guard accepts pnpm lock updates and protects npm lockfiles and workspace policy', t => {
+  const dir = fixture(t);
+  git(dir, 'init', '-b', 'main');
+  write(dir, 'pnpm-lock.yaml', pnpmLock());
+  write(dir, 'lib/feature.js', 'export const value = 1;\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-m', 'Initial');
+  const base = git(dir, 'rev-parse', 'HEAD');
+  const guard = () => spawnSync(process.execPath, [path.join(scripts, 'upstream-paths.mjs'), base], { cwd: dir, encoding: 'utf8' });
+
+  write(dir, 'pnpm-lock.yaml', pnpmLock({ packages: ['vinext@1.1.0', 'safe-package@1.2.3'] }));
+  git(dir, 'add', '.');
+  assert.equal(guard().status, 0, 'pnpm lockfile updates are allowed');
+  git(dir, 'reset', '--hard', base);
+
+  write(dir, 'package-lock.json', '{}\n');
+  git(dir, 'add', '.');
+  assert.notEqual(guard().status, 0, 'npm lockfiles remain protected');
+  git(dir, 'reset', '--hard', base);
+
+  write(dir, 'pnpm-workspace.yaml', 'packages: []\n');
+  git(dir, 'add', '.');
+  assert.notEqual(guard().status, 0, 'workspace build policy remains protected');
 });
 
 test('publishing advances only the draft branch and safely reuses an orphaned branch', t => {
@@ -117,8 +162,8 @@ test('publishing advances only the draft branch and safely reuses an orphaned br
   const remote = path.join(dir, 'remote.git');
   fs.mkdirSync(seed);
   git(seed, 'init', '-b', 'main');
-  write(seed, 'package.json', JSON.stringify({ dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } }));
-  write(seed, 'package-lock.json', JSON.stringify({ packages: {} }));
+  write(seed, 'package.json', JSON.stringify({ packageManager: 'pnpm@11.13.0', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } }));
+  write(seed, 'pnpm-lock.yaml', pnpmLock());
   write(seed, 'wrangler.jsonc', '{ "d1_databases": [], "r2_buckets": [], "queues": {} }');
   write(seed, 'lib/feature.js', 'export const value = 1;\n');
   write(seed, '.github/upstream-sync.json', JSON.stringify({ repository: 'marclou/mailcheap', branch: 'main', lastApplied: 'a'.repeat(40) }));

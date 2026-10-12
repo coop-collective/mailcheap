@@ -85,9 +85,9 @@ export function deploymentSecrets(env) {
 
 export function validateDeployConfig(config, env, { dryRun = false } = {}) {
   if (dryRun) return;
-  if (!/^[a-f0-9]{32}$/i.test(config.account_id || '')) throw new Error('Run npm run setup:cloudflare first to select the Cloudflare account.');
+  if (!/^[a-f0-9]{32}$/i.test(config.account_id || '')) throw new Error('Run pnpm setup first to select the Cloudflare account.');
   const db = config.d1_databases?.find(item => item.binding === 'DB');
-  if (!db?.database_id || db.database_id === PLACEHOLDER_ID) throw new Error('Run npm run setup:cloudflare first to provision D1.');
+  if (!db?.database_id || db.database_id === PLACEHOLDER_ID) throw new Error('Run pnpm setup first to provision D1.');
   publicAppUrl(config.vars?.APP_URL);
   if (config.vars?.SENDING_ENABLED === 'true') {
     if (!(env.SES_ACCESS_KEY_ID || env.AWS_ACCESS_KEY_ID) || !(env.SES_SECRET_ACCESS_KEY || env.AWS_SECRET_ACCESS_KEY)) throw new Error('Sending is enabled but SES credentials are missing from the secrets file.');

@@ -15,7 +15,7 @@ export async function readCloudflareAuth(runWrangler) {
     auth = JSON.parse(await runWrangler(["auth", "token", "--json"]));
   } catch {
     // A subprocess error can include captured credentials; do not propagate it.
-    throw new Error("Cloudflare authentication failed. Run `npx wrangler login` or set CLOUDFLARE_API_TOKEN, then retry.");
+    throw new Error("Cloudflare authentication failed. Run `pnpm exec wrangler login` or set CLOUDFLARE_API_TOKEN, then retry.");
   }
   if (!["oauth", "api_token"].includes(auth.type) || typeof auth.token !== "string" || !auth.token.trim()) {
     throw new Error("Setup needs Wrangler OAuth login or CLOUDFLARE_API_TOKEN. Global API keys are not supported.");

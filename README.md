@@ -25,6 +25,8 @@ Setup walks through your Cloudflare account and resources and generates a privat
 `.env`. The repository includes only blank/example environment templates; your
 `.env`, credentials, resource IDs and generated configuration stay ignored by Git.
 For local development only, use `pnpm run setup --local` followed by `pnpm dev`.
+pnpm is the project's package manager. Commit dependency changes to `pnpm-lock.yaml`;
+overrides and dependency build permissions live in `pnpm-workspace.yaml`.
 
 Sending starts disabled. Complete [SES setup](#amazon-ses-setup) for newsletters
 or [Cloudflare Email Service setup](#cloudflare-transactional-email-setup) for the transactional API. See [deployment](#deploy) for restoring an existing installation, custom
@@ -73,8 +75,6 @@ pnpm run setup --local
 pnpm run dev
 ```
 
-The npm workflow remains supported with `npm ci`, `npm run setup -- --local` and `npm run dev`; existing npm CI can continue using its current lockfile and scripts.
-
 `pnpm run setup --local` creates or reuses local credentials and applies local D1 migrations without logging in to Cloudflare or creating cloud resources. The guided default, `pnpm setup`, also authenticates to Cloudflare as needed and creates or reuses the production resources described below. Setup writes private values to `.env` by default, with owner-only permissions. Read `ADMIN_PASSWORD` there to log in; credentials are never printed. Existing passwords and signing secrets are preserved on reruns.
 
 `.env` is the preferred environment file. Existing `.dev.vars` is supported as a legacy fallback when `.env` is absent. Pass `--env-file PATH` to select another private file. Setup refuses to write secrets into tracked example files. Project scripts make the selected file authoritative and create filtered local dev variables under ignored `.wrangler/mailcheap/`, so a root `.dev.vars` cannot shadow `.env` values.
@@ -82,14 +82,14 @@ The npm workflow remains supported with `npm ci`, `npm run setup -- --local` and
 Open `http://localhost:3000`. Vite runs the server in Cloudflare's local workerd runtime with local D1, R2 and Queues. `LOCAL_APP_URL` defaults to `http://localhost:3000`; `LOCAL_SENDING_ENABLED` defaults to `false`. Local-only setup needs no Cloudflare login, cloud resources or AWS credentials. Do not use real credentials in tests.
 
 ```sh
-npm test
-npm run lint
-npm run check:cloudflare
-npm run build
-npm run preview
+pnpm test
+pnpm run lint
+pnpm run check:cloudflare
+pnpm run build
+pnpm run preview
 ```
 
-`preview` serves the built Worker on Wrangler's local port (normally 8787) and explicitly shares `.wrangler/state` with development and local migrations. Set `LOCAL_APP_URL` if testing generated links. `npm run cf:types` generates binding types from Wrangler config.
+`preview` serves the built Worker on Wrangler's local port (normally 8787) and explicitly shares `.wrangler/state` with development and local migrations. Set `LOCAL_APP_URL` if testing generated links. `pnpm run cf:types` generates binding types from Wrangler config.
 
 Test files run sequentially so local Worker startup and D1 integration tests do not compete with the archive parser's timing assertions. The parser's time limits remain enforced.
 
@@ -129,7 +129,7 @@ To build and package locally without remote migrations or uploading:
 pnpm run deploy --dry-run
 ```
 
-Setup and deploy accept `--env-file PATH`. pnpm's built-in options can intercept flags after a bare script name, so use `pnpm run` when passing script options. npm users can run `npm run setup -- --local`, `npm run setup`, `npm run deploy` and `npm run deploy -- --dry-run`. Bare `pnpm setup` and `pnpm deploy` run this project's scripts with no arguments. The scripts use the top-level Wrangler configuration; named `CLOUDFLARE_ENV` environments are rejected.
+Setup and deploy accept `--env-file PATH`. Use `pnpm run` when passing script options, and add a `--` separator when selecting an environment file: `pnpm run setup -- --env-file .env.preview` or `pnpm run deploy -- --dry-run --env-file .env.preview`. The separator prevents pnpm from interpreting `--env-file` as a Node startup option. Bare `pnpm setup` and `pnpm deploy` run this project's scripts with no arguments. The scripts use the top-level Wrangler configuration; named `CLOUDFLARE_ENV` environments are rejected.
 
 SES identity verification, DNS records, configuration-set event delivery and SNS subscription confirmation remain manual Cloudflare/AWS setup steps. The setup command does not make SES or DNS changes.
 

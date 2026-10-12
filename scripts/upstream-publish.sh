@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Execute the original trusted script copied outside the candidate checkout.
-# This job has a fork-write token and must never run candidate code or npm.
+# This job has a fork-write token and must never run candidate code or pnpm.
 set -euo pipefail
 : "${GH_TOKEN:?Missing narrowly scoped fork write token}"
 : "${SYNC_BASE:?Missing fork base}"

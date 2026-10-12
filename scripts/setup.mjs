@@ -7,7 +7,7 @@ import { projectEnvironment, resolveConfig, resourceEnvironment, writeRuntimeCon
 import { readCloudflareAuth, provisionCloudflare } from './setup-cloudflare.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { values: flags } = parseArgs({ options: {
+const { values: flags } = parseArgs({ args: process.argv.slice(process.argv[2] === '--' ? 3 : 2), options: {
   local: { type: 'boolean' }, cloudflare: { type: 'boolean' }, email: { type: 'string' }, account: { type: 'string' }, name: { type: 'string' },
   'app-url': { type: 'string' }, 'skip-r2': { type: 'boolean' }, 'env-file': { type: 'string' }, help: { type: 'boolean' },
 } });
@@ -30,7 +30,7 @@ async function migrateLocal(config, values) {
 
 async function main() {
   if (flags.help) {
-    console.log('pnpm setup\npnpm run setup [--email you@example.com] [--env-file .env]\npnpm run setup --local\n\nGuided setup reads private .env overrides, creates/reuses Cloudflare D1, R2 and\nqueues, and saves their IDs/names to .env. Public wrangler.jsonc stays unchanged.\n--local skips Cloudflare login and provisioning. Both modes generate missing\nlogin/signing secrets and apply local migrations. Run pnpm deploy to publish.\nOptional: --account ID --name NAME --app-url https://mail.example.com --skip-r2\nUse pnpm run when passing options, so pnpm forwards them to the script.\nNo setup command enables sending or changes AWS.');
+    console.log('pnpm setup\npnpm run setup -- [--email you@example.com] [--env-file .env]\npnpm run setup --local\n\nGuided setup reads private .env overrides, creates/reuses Cloudflare D1, R2 and\nqueues, and saves their IDs/names to .env. Public wrangler.jsonc stays unchanged.\n--local skips Cloudflare login and provisioning. Both modes generate missing\nlogin/signing secrets and apply local migrations. Run pnpm deploy to publish.\nOptional: --account ID --name NAME --app-url https://mail.example.com --skip-r2\nUse pnpm run when passing options, so pnpm forwards them to the script.\nNo setup command enables sending or changes AWS.');
     return;
   }
   if (process.env.CLOUDFLARE_ENV) throw new Error('Setup uses the top-level configuration; unset CLOUDFLARE_ENV first.');

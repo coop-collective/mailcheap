@@ -7,7 +7,10 @@ if (!/^[a-f0-9]{40}$/.test(base || '')) throw new Error('Expected a base commit 
 const changed = execFileSync('git', ['diff', '--no-ext-diff', '--name-only', '-z', base], { encoding: 'utf8' })
   .split('\0').filter(Boolean);
 const allowedRoots = /^(app|assets|components|docs|lib|migrations|models|public|tests|worker|workers)\//;
-const allowedFiles = /^(package(?:-lock)?\.json|(?:next|vite|eslint|postcss)\.config\.[cm]?[jt]s|wrangler\.jsonc?|worker\.[cm]?[jt]s|README\.md|\.env\.example|proxy\.[jt]s|instrumentation\.[jt]s|jsconfig\.json)$/;
+// pnpm-lock.yaml is generated dependency data and can be reviewed with an
+// upstream batch. pnpm-workspace.yaml controls package/build policy and stays
+// protected so changes to it require a manual adaptation.
+const allowedFiles = /^(package\.json|pnpm-lock\.yaml|(?:next|vite|eslint|postcss)\.config\.[cm]?[jt]s|wrangler\.jsonc?|worker\.[cm]?[jt]s|README\.md|\.env\.example|proxy\.[jt]s|instrumentation\.[jt]s|jsconfig\.json)$/;
 for (const path of changed) {
   if ((!allowedRoots.test(path) && !allowedFiles.test(path)) ||
       /(^|\/)(?:AGENTS\.md|\.codex|\.agents|\.github|\.git)(\/|$)/.test(path)) {

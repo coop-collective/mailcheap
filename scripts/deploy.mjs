@@ -8,10 +8,10 @@ import { projectEnvironment, loadRuntimeConfig, cloudflareCredentials } from './
 import { readCloudflareAuth } from './setup-cloudflare.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { values: flags } = parseArgs({ options: { 'dry-run': { type: 'boolean' }, 'env-file': { type: 'string' }, help: { type: 'boolean' } } });
+const { values: flags } = parseArgs({ args: process.argv.slice(process.argv[2] === '--' ? 3 : 2), options: { 'dry-run': { type: 'boolean' }, 'env-file': { type: 'string' }, help: { type: 'boolean' } } });
 
 async function main() {
-  if (flags.help) { console.log('pnpm deploy\npnpm run deploy [--dry-run] [--env-file .env]\nReads private .env IDs/settings, builds, migrates remote D1 and deploys code/secrets.\n--dry-run skips remote migrations and does not upload anything.\nUse pnpm run when passing options, so pnpm forwards them to the script.'); return; }
+  if (flags.help) { console.log('pnpm deploy\npnpm run deploy -- [--dry-run] [--env-file .env]\nReads private .env IDs/settings, builds, migrates remote D1 and deploys code/secrets.\n--dry-run skips remote migrations and does not upload anything.\nUse pnpm run when passing options, so pnpm forwards them to the script.'); return; }
   if (process.env.CLOUDFLARE_ENV) throw new Error('This deploy command uses the top-level configuration; unset CLOUDFLARE_ENV first.');
   const { file, values } = projectEnvironment(root, flags['env-file']);
   const secrets = deploymentSecrets(values);

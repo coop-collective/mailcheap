@@ -27,6 +27,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   belongs to the private controller described in docs/upstream-sync.md.
 - Keep `wrangler.jsonc` generic. Private `.env` IDs, names and settings are
   resolved by `scripts/project-config.mjs`; never commit generated configs.
-- Run `npm test`, `npm run lint`, `npm run check:cloudflare` and `npm run build`.
+- Use the pinned pnpm version and `pnpm install --frozen-lockfile`. Maintain
+  `pnpm-lock.yaml`; dependency overrides and allowed build scripts belong in
+  `pnpm-workspace.yaml`. Do not add npm or Yarn lockfiles.
+- Run `pnpm test`, `pnpm run lint`, `pnpm run check:cloudflare` and `pnpm run build`.
   Apply migrations locally to test schema changes; production migrations and
   deployments require the intended Cloudflare account and resource configuration.

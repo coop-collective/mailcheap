@@ -2,13 +2,12 @@
 
 # dependencies
 /node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# pnpm is the only project package manager.
+/package-lock.json
+/npm-shrinkwrap.json
+/yarn.lock
+/.pnp*
+/.yarn/
 
 # testing
 /coverage
@@ -45,5 +44,4 @@ next-env.d.ts
 .vinext/
 .wrangler/
 .dev.vars*
-!.dev.vars.example
 /worker-configuration.d.ts

@@ -46,14 +46,15 @@ git -C "$workspace" log --format='%H %s' "$SYNC_FROM..$SYNC_TARGET" > "$context/
 cp .github/upstream-controller/prompt.md "$context/prompt.md"
 cp .github/upstream-controller/result.schema.json "$context/result.schema.json"
 
-# Install only the trusted base's dependencies, without lifecycle scripts and
+# Install only the trusted base's dependencies with pinned pnpm, without lifecycle scripts and
 # without any Codex/GitHub/cloud credentials. Nothing runs on the host.
 docker run --rm --pull never --user "$(id -u):$(id -g)" \
   --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 \
   --memory 4g --cpus 2 --read-only --tmpfs /tmp:rw,nosuid,nodev,size=1g \
   --mount "type=bind,src=$workspace,dst=/workspace" \
-  --workdir /workspace --entrypoint npm "$codex_image" \
-  ci --ignore-scripts --cache /tmp/npm-cache --no-audit --no-fund
+  --env HOME=/tmp/pnpm-home \
+  --workdir /workspace --entrypoint pnpm "$codex_image" \
+  install --frozen-lockfile --ignore-scripts --store-dir /tmp/pnpm-store
 
 model_args=()
 if [[ -n "${CODEX_MODEL:-}" ]]; then model_args=(--model "$CODEX_MODEL"); fi

@@ -147,7 +147,8 @@ function cliFixture(t) {
   for (const file of ['setup.mjs', 'setup-common.mjs', 'setup-cloudflare.mjs', 'project-config.mjs', 'deploy.mjs']) fs.copyFileSync(path.join(sourceRoot, 'scripts', file), path.join(root, 'scripts', file));
   for (const file of ['config.js', 'validation.js']) fs.copyFileSync(path.join(sourceRoot, 'lib', file), path.join(root, 'lib', file));
   fs.copyFileSync(path.join(sourceRoot, 'wrangler.jsonc'), path.join(root, 'wrangler.jsonc'));
-  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8')).scripts }));
+  const pkg = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8'));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ type: 'module', packageManager: pkg.packageManager, scripts: pkg.scripts }));
   fs.mkdirSync(path.join(root, 'node_modules/wrangler/bin'), { recursive: true });
   fs.mkdirSync(path.join(root, 'node_modules/vite/bin'), { recursive: true });
   fs.symlinkSync(path.join(sourceRoot, 'node_modules/jsonc-parser'), path.join(root, 'node_modules/jsonc-parser'));
@@ -172,7 +173,7 @@ if(import.meta.url.includes('vite')) {
 
 test('checkout setup CLI creates a selected env file without Node treating it as a startup file', t => {
   const root = cliFixture(t);
-  const result = spawnSync('npm', ['run', 'setup', '--', '--local', '--email', 'admin@example.test', '--env-file', '.env'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
+  const result = spawnSync('pnpm', ['run', 'setup', '--', '--local', '--email', 'admin@example.test', '--env-file', '.env'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
   assert.equal(result.status, 0, result.stderr);
   const calls = fs.readFileSync(path.join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.length, 1);
@@ -188,7 +189,7 @@ test('checkout setup CLI creates a selected env file without Node treating it as
 test('deploy dry-run builds/packages without auth or remote migration and removes temporary secrets', t => {
   const root = cliFixture(t);
   const { values } = prepareEnvironment(root, { email: 'admin@example.test' });
-  const result = spawnSync('npm', ['run', 'deploy', '--', '--dry-run'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '' } });
+  const result = spawnSync('pnpm', ['run', 'deploy', '--', '--dry-run', '--env-file', '.env'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '' } });
   assert.equal(result.status, 0, result.stderr);
   const calls = fs.readFileSync(path.join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.length, 2);
@@ -204,7 +205,7 @@ test('fresh checkout deployment uses private IDs/settings for build and migratio
   const { file, values } = prepareEnvironment(root, { email: 'admin@example.test' });
   fs.appendFileSync(file, "CLOUDFLARE_ACCOUNT_ID=" + 'a'.repeat(32) + "\nWORKER_NAME=my-private-worker\nD1_DATABASE_ID=11111111-2222-4333-8444-555555555555\nD1_DATABASE_NAME=private-db\nR2_BUCKET_NAME=private-images\nEMAIL_QUEUE_NAME=private-email\nEMAIL_DEAD_LETTER_QUEUE_NAME=private-dlq\nAPP_URL=https://mail.example.test\nCLOUDFLARE_API_TOKEN=fake-cloudflare-token\n");
   const template = fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8');
-  const result = spawnSync('npm', ['run', 'deploy'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
+  const result = spawnSync('pnpm', ['run', 'deploy'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
   assert.equal(result.status, 0, result.stderr);
   const calls = fs.readFileSync(path.join(root, 'calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(calls.map(call => call.tool === 'vite' ? 'build' : call.args[0]), ['whoami', 'auth', 'build', 'd1', 'deploy']);
@@ -236,7 +237,7 @@ export async function provisionCloudflare({accountId,config}) {
   return {config,workersSubdomain:'fixture-account'};
 }`);
   const template = fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8');
-  const run = () => spawnSync('npm', ['run', 'setup', '--', '--email', 'admin@example.test', '--name', 'private-worker'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
+  const run = () => spawnSync('pnpm', ['run', 'setup', '--email', 'admin@example.test', '--name', 'private-worker'], { cwd: root, encoding: 'utf8', env: { ...process.env, CLOUDFLARE_ENV: '', MAILCHEAP_ENV_FILE: '' } });
   const first = run();
   assert.equal(first.status, 0, first.stderr);
   const env = readEnvironment(path.join(root, '.env'));
