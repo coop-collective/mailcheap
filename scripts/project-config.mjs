@@ -3,7 +3,7 @@ import path from 'node:path';
 import { environmentFile, readEnvironment, readConfig, SECRET_KEYS, SETTING_KEYS, PLACEHOLDER_ID } from './setup-common.mjs';
 import { normalizeEmail } from '../lib/validation.js';
 
-export const RESOURCE_KEYS = ['CLOUDFLARE_ACCOUNT_ID', 'WORKER_NAME', 'D1_DATABASE_ID', 'D1_DATABASE_NAME', 'R2_ENABLED', 'R2_BUCKET_NAME', 'EMAIL_QUEUE_NAME', 'EMAIL_DEAD_LETTER_QUEUE_NAME'];
+export const RESOURCE_KEYS = ['CLOUDFLARE_ACCOUNT_ID', 'WORKER_NAME', 'DEPLOYMENT_ENVIRONMENT', 'CUSTOM_DOMAIN', 'D1_DATABASE_ID', 'D1_DATABASE_NAME', 'R2_ENABLED', 'R2_BUCKET_NAME', 'EMAIL_QUEUE_NAME', 'EMAIL_DEAD_LETTER_QUEUE_NAME'];
 const PUBLIC_KEYS = ['APP_URL', 'SENDING_ENABLED', ...SETTING_KEYS];
 const ENV_KEYS = [...RESOURCE_KEYS, ...PUBLIC_KEYS, ...SECRET_KEYS, 'CLOUDFLARE_API_TOKEN', 'LOCAL_APP_URL', 'LOCAL_SENDING_ENABLED', 'LOCAL_TRANSACTIONAL_EMAIL_ENABLED'];
 
@@ -19,6 +19,17 @@ export function projectEnvironment(root, requested) {
 
 export function resolveConfig(base, values, { local = false } = {}) {
   const config = structuredClone(base);
+  const environment = values.DEPLOYMENT_ENVIRONMENT || 'production';
+  if (!['production', 'preview'].includes(environment)) throw new Error('DEPLOYMENT_ENVIRONMENT must be production or preview.');
+  if (environment === 'preview' && !values.WORKER_NAME?.endsWith('-preview')) throw new Error('Preview WORKER_NAME must end in -preview to separate it from production.');
+  if (environment === 'preview') {
+    delete config.routes;
+    delete config.route;
+  } else if (values.CUSTOM_DOMAIN) {
+    const domain = values.CUSTOM_DOMAIN.toLowerCase();
+    if (domain !== values.CUSTOM_DOMAIN.trim().toLowerCase() || !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(domain)) throw new Error('CUSTOM_DOMAIN must be a hostname without a URL scheme, path or wildcard.');
+    config.routes = [{ pattern: domain, custom_domain: true }];
+  }
   const renamed = Boolean(values.WORKER_NAME && values.WORKER_NAME !== base.name);
   config.name = values.WORKER_NAME || config.name;
   if (!/^[a-z][a-z0-9-]{0,44}$/.test(config.name)) throw new Error('WORKER_NAME must be 1–45 lowercase letters, numbers or hyphens, starting with a letter.');
@@ -48,12 +59,16 @@ export function resolveConfig(base, values, { local = false } = {}) {
     config.vars.APP_URL = values.LOCAL_APP_URL || 'http://localhost:3000';
     config.vars.SENDING_ENABLED = values.LOCAL_SENDING_ENABLED || 'false';
   }
+  if (environment === 'preview') {
+    config.vars.SENDING_ENABLED = 'false';
+    config.vars.TRANSACTIONAL_EMAIL_ENABLED = 'false';
+  }
   if (!['true', 'false'].includes(config.vars.SENDING_ENABLED)) throw new Error('SENDING_ENABLED must be true or false.');
   const transactionalEnabled = config.vars.TRANSACTIONAL_EMAIL_ENABLED ?? 'false';
   const localTransactionalEnabled = values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED ?? 'false';
   if (!['true', 'false'].includes(transactionalEnabled)) throw new Error('TRANSACTIONAL_EMAIL_ENABLED must be true or false.');
   if (!['true', 'false'].includes(localTransactionalEnabled)) throw new Error('LOCAL_TRANSACTIONAL_EMAIL_ENABLED must be true or false.');
-  const useTransactionalEmail = local ? localTransactionalEnabled === 'true' : transactionalEnabled === 'true';
+  const useTransactionalEmail = environment !== 'preview' && (local ? localTransactionalEnabled === 'true' : transactionalEnabled === 'true');
   config.vars.TRANSACTIONAL_EMAIL_ENABLED = String(useTransactionalEmail);
   let sender = config.vars.TRANSACTIONAL_EMAIL_FROM ?? '';
   if (useTransactionalEmail) {
@@ -116,7 +131,13 @@ export function writeRuntimeConfig(root, config, values, { local = false } = {})
     SENDING_ENABLED: values.LOCAL_SENDING_ENABLED || 'false',
     TRANSACTIONAL_EMAIL_ENABLED: values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED === 'true' ? 'true' : 'false',
   };
-  for (const key of SECRET_KEYS) if (values[key]) devValues[key] = values[key];
+  const preview = values.DEPLOYMENT_ENVIRONMENT === 'preview';
+  if (preview) {
+    devValues.SENDING_ENABLED = 'false';
+    devValues.TRANSACTIONAL_EMAIL_ENABLED = 'false';
+  }
+  const runtimeKeys = preview ? ['ADMIN_EMAIL', 'ADMIN_PASSWORD', 'SESSION_SECRET'] : SECRET_KEYS;
+  for (const key of runtimeKeys) if (values[key]) devValues[key] = values[key];
   const varsPath = path.join(directory, '.dev.vars');
   fs.writeFileSync(varsPath, Object.entries(devValues).map(([key, value]) => `${key}=${dotenvValue(value)}`).join('\n') + '\n', { mode: 0o600 });
   fs.chmodSync(configPath, 0o600);

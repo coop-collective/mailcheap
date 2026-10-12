@@ -27,6 +27,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   belongs to the private controller described in docs/upstream-sync.md.
 - Keep `wrangler.jsonc` generic. Private `.env` IDs, names and settings are
   resolved by `scripts/project-config.mjs`; never commit generated configs.
+- Keep GitHub deployment opt-ins disabled by default for forks. Preview Workers
+  use a separate environment file and test resources, with both email providers
+  disabled. Preserve the environment checks and secret filtering in the setup
+  and deployment scripts; see `docs/deployment.md`.
 - Use the pinned pnpm version and `pnpm install --frozen-lockfile`. Maintain
   `pnpm-lock.yaml`; dependency overrides and allowed build scripts belong in
   `pnpm-workspace.yaml`. Do not add npm or Yarn lockfiles.

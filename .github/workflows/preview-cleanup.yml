@@ -1,0 +1,59 @@
+name: Cloudflare Preview cleanup
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-preview:
+    if: >-
+      vars.MAILCHEAP_CI_ENABLED != 'false' && vars.MAILCHEAP_DEPLOY_PREVIEWS == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: mailcheap-preview
+      cancel-in-progress: false
+      queue: max
+    environment: preview
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      PREVIEW_NAME: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm install --global --ignore-scripts pnpm@11.13.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare private preview configuration
+        env:
+          MAILCHEAP_ENV: ${{ secrets.MAILCHEAP_ENV }}
+        run: node scripts/ci-env.mjs --prepare preview
+      - name: Verify pull request is still closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-env.mjs --assert-closed-preview
+      - name: Delete Preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MAILCHEAP_ENV_FILE: .env.ci
+        run: pnpm run preview:deploy -- --delete --name "$PREVIEW_NAME" --env-file .env.ci
+      - name: Remove private runtime configuration
+        if: always()
+        run: node scripts/ci-env.mjs --remove

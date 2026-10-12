@@ -1,3 +1,7 @@
+# vinext/Vite's current RSC build stalls with pnpm's isolated symlink layout.
+# Keep pnpm's frozen lockfile while using the compatible flat dependency tree.
+nodeLinker: hoisted
+
 overrides:
   "satori>fflate": 0.7.5
 

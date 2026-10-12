@@ -1,25 +1,28 @@
-name: Cloudflare checks
+name: Cloudflare checks and deployments
 
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: checks-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   check:
+    if: vars.MAILCHEAP_CI_ENABLED != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: checks-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -31,7 +34,111 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check:cloudflare
-      - run: node --test scripts/upstream-sync.test.mjs
+      - run: pnpm run test:upstream
       - run: pnpm test
       - run: pnpm run lint
       - run: pnpm run build
+
+  deploy-production:
+    needs: check
+    if: >-
+      needs.check.result == 'success' && vars.MAILCHEAP_CI_ENABLED != 'false' &&
+      vars.MAILCHEAP_DEPLOY_PRODUCTION == 'true' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: mailcheap-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.prepare.outputs.app_url }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm install --global --ignore-scripts pnpm@11.13.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare private runtime configuration
+        id: prepare
+        env:
+          MAILCHEAP_ENV: ${{ secrets.MAILCHEAP_ENV }}
+        run: node scripts/ci-env.mjs --prepare production
+      - name: Verify main still points at the tested commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-env.mjs --assert-main
+      - name: Deploy production Worker and apply migrations
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MAILCHEAP_ENV_FILE: .env.ci
+        run: pnpm deploy
+      - name: Remove private runtime configuration
+        if: always()
+        run: node scripts/ci-env.mjs --remove
+
+  deploy-preview:
+    needs: check
+    if: >-
+      needs.check.result == 'success' && vars.MAILCHEAP_CI_ENABLED != 'false' &&
+      vars.MAILCHEAP_DEPLOY_PREVIEWS == 'true' && github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: mailcheap-preview
+      cancel-in-progress: false
+      queue: max
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.preview_url }}
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      PREVIEW_NAME: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm install --global --ignore-scripts pnpm@11.13.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare private preview configuration
+        env:
+          MAILCHEAP_ENV: ${{ secrets.MAILCHEAP_ENV }}
+        run: node scripts/ci-env.mjs --prepare preview
+      - name: Verify pull request is still current and open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-env.mjs --assert-preview
+      - name: Deploy isolated Preview
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MAILCHEAP_ENV_FILE: .env.ci
+        run: pnpm run preview:deploy -- --name "$PREVIEW_NAME" --env-file .env.ci
+      - name: Remove private runtime configuration
+        if: always()
+        run: node scripts/ci-env.mjs --remove

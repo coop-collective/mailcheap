@@ -16,7 +16,7 @@ async function main() {
   const { file, values } = projectEnvironment(root, flags['env-file']);
   const secrets = deploymentSecrets(values);
   const { config, configPath } = loadRuntimeConfig(root, { file });
-  validateDeployConfig(config, secrets, { dryRun: flags['dry-run'] });
+  validateDeployConfig(config, values, { dryRun: flags['dry-run'] });
   const env = { ...cloudflareCredentials(values), ...(config.account_id ? { CLOUDFLARE_ACCOUNT_ID: config.account_id } : {}), MAILCHEAP_ENV_FILE: file, CI: 'true' };
   if (!flags['dry-run']) {
     const { accounts } = await readCloudflareAuth(args => wrangler(root, args, { capture: true, env }));

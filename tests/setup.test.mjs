@@ -103,6 +103,35 @@ test('transactional email binding is opt-in, sender restricted, and preserves ot
   ]);
 });
 
+test('production and preview deployment files cannot be used interchangeably', () => {
+  const config = readConfig(sourceRoot).config;
+  assert.throws(() => validateDeployConfig(config, { DEPLOYMENT_ENVIRONMENT: 'preview' }, { dryRun: true }), /requires DEPLOYMENT_ENVIRONMENT=production/);
+  assert.throws(() => validateDeployConfig(config, { DEPLOYMENT_ENVIRONMENT: 'production' }, { dryRun: true, target: 'preview' }), /requires DEPLOYMENT_ENVIRONMENT=preview/);
+  assert.doesNotThrow(() => validateDeployConfig(config, { DEPLOYMENT_ENVIRONMENT: 'preview' }, { dryRun: true, target: 'preview' }));
+});
+
+test('custom domains stay in production and preview strips outbound email bindings and secrets', t => {
+  const root = fixture(t);
+  const base = readConfig(sourceRoot).config;
+  const production = resolveConfig(base, { CUSTOM_DOMAIN: 'mail.example.test' });
+  assert.deepEqual(production.routes, [{ pattern: 'mail.example.test', custom_domain: true }]);
+  for (const CUSTOM_DOMAIN of ['https://mail.example.test', '*.example.test', 'mail.example.test/path', 'example.test ']) {
+    assert.throws(() => resolveConfig(base, { CUSTOM_DOMAIN }), /CUSTOM_DOMAIN/);
+  }
+  const values = { DEPLOYMENT_ENVIRONMENT: 'preview', WORKER_NAME: 'mailcheap-preview', CUSTOM_DOMAIN: 'mail.example.test', SENDING_ENABLED: 'true', TRANSACTIONAL_EMAIL_ENABLED: 'true', LOCAL_SENDING_ENABLED: 'true', LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'true', AWS_ACCESS_KEY_ID: 'do-not-bind', ADMIN_EMAIL: 'preview@example.test' };
+  const preview = resolveConfig(production, values);
+  assert.equal(preview.routes, undefined);
+  assert.equal(preview.vars.SENDING_ENABLED, 'false');
+  assert.deepEqual(preview.send_email, []);
+  const configPath = writeRuntimeConfig(root, preview, values);
+  const devVars = readEnvironment(path.join(path.dirname(configPath), '.dev.vars'));
+  assert.equal(devVars.AWS_ACCESS_KEY_ID, undefined);
+  assert.equal(devVars.SENDING_ENABLED, 'false');
+  assert.equal(devVars.TRANSACTIONAL_EMAIL_ENABLED, 'false');
+  assert.equal(devVars.ADMIN_EMAIL, values.ADMIN_EMAIL);
+  assert.throws(() => resolveConfig(base, { DEPLOYMENT_ENVIRONMENT: 'preview', WORKER_NAME: 'mailcheap' }), /end in -preview/);
+});
+
 test('local transactional email requires a separate explicit opt-in from production', () => {
   const base = readConfig(sourceRoot).config;
   const productionEnabled = resolveConfig(base, { TRANSACTIONAL_EMAIL_ENABLED: 'true', TRANSACTIONAL_EMAIL_FROM: 'no-reply@example.test' }, { local: true });

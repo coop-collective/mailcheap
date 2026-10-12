@@ -83,7 +83,8 @@ export function deploymentSecrets(env) {
   return Object.fromEntries(SECRET_KEYS.filter(key => env[key]).map(key => [key, env[key]]));
 }
 
-export function validateDeployConfig(config, env, { dryRun = false } = {}) {
+export function validateDeployConfig(config, env, { dryRun = false, target = 'production' } = {}) {
+  if ((env.DEPLOYMENT_ENVIRONMENT || 'production') !== target) throw new Error(`This command requires DEPLOYMENT_ENVIRONMENT=${target}. Use the matching environment file and deployment command.`);
   if (dryRun) return;
   if (!/^[a-f0-9]{32}$/i.test(config.account_id || '')) throw new Error('Run pnpm setup first to select the Cloudflare account.');
   const db = config.d1_databases?.find(item => item.binding === 'DB');

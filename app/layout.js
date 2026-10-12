@@ -1,12 +1,24 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import ProviderTheme from "@/components/ProviderTheme";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_NAME } from "@/lib/config";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistSans = localFont({
+	src: "../assets/fonts/Geist-Variable.woff2",
+	variable: "--font-geist-sans",
+	weight: "100 900",
+	style: "normal",
+});
+const geistMono = localFont({
+	src: "../assets/fonts/GeistMono-Variable.woff2",
+	variable: "--font-geist-mono",
+	weight: "100 900",
+	style: "normal",
+	adjustFontFallback: false,
+	fallback: ["ui-monospace", "SFMono-Regular", "Roboto Mono", "Menlo", "Monaco", "Liberation Mono", "DejaVu Sans Mono", "Courier New", "monospace"],
+});
 
 // The icon files in app/ apply wherever a page sets no icons; archive pages set the newsletter's logo.
 // favicon.ico sits in public/ because Next links app/favicon.ico on every page, archive pages included.

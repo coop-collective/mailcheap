@@ -93,6 +93,8 @@ pnpm run preview
 
 Test files run sequentially so local Worker startup and D1 integration tests do not compete with the archive parser's timing assertions. The parser's time limits remain enforced.
 
+The pinned pnpm setup uses `nodeLinker: hoisted` because the current vinext/Vite RSC build stalls with pnpm's isolated dependency layout. Keep this setting when installing locally or in CI. Dashboard fonts are bundled locally, so builds do not need to download Google Fonts.
+
 Validation includes application tests with real local D1 transactions, upstream workflow fixture suites, browser flows on workerd, a production build and Wrangler packaging dry run. No live SES delivery or subscription-authenticated upstream run has been exercised. The dependency audit still reports the upstream `braces` nesting advisory through vinext/build tooling; the latest published `braces` version has no fix. The vulnerable `fflate` version pulled by Satori is overridden to its patched release. Recheck upstream advisories before production rollout.
 
 ## Deploy
@@ -119,7 +121,7 @@ pnpm run setup --skip-r2
 
 `APP_URL` is the production public URL. Region, SES feedback, send-rate, archive-host, alert and other production variables can be configured in `.env`; they override the public Wrangler template during deployment. No generated values are written back to tracked Wrangler files.
 
-Setup derives `APP_URL` from your existing `workers.dev` subdomain. If there is none, register one in Cloudflare or supply `--app-url https://mail.example.com` and attach that custom domain to the Worker separately. Cloudflare must have the selected products enabled; setup does not change billing plans.
+Setup derives `APP_URL` from your existing `workers.dev` subdomain. For a custom domain, first onboard its DNS zone to Cloudflare, then set `CUSTOM_DOMAIN=mail.example.com` and `APP_URL=https://mail.example.com` in your private `.env`. Deployment attaches that hostname to the Worker. Cloudflare must have the selected products enabled; setup does not change billing plans.
 
 For an **existing installation**, restore its original `.env` (or legacy `.dev.vars`) before deploying from a new checkout. A fresh checkout can deploy with the restored file without rerunning setup. Keep the original `SESSION_SECRET` to preserve unsubscribe, confirmation and tracking links. Changing the admin email or password invalidates sessions. Keep a private backup of this file and your configured resource IDs.
 
@@ -129,9 +131,24 @@ To build and package locally without remote migrations or uploading:
 pnpm run deploy --dry-run
 ```
 
-Setup and deploy accept `--env-file PATH`. Use `pnpm run` when passing script options, and add a `--` separator when selecting an environment file: `pnpm run setup -- --env-file .env.preview` or `pnpm run deploy -- --dry-run --env-file .env.preview`. The separator prevents pnpm from interpreting `--env-file` as a Node startup option. Bare `pnpm setup` and `pnpm deploy` run this project's scripts with no arguments. The scripts use the top-level Wrangler configuration; named `CLOUDFLARE_ENV` environments are rejected.
+Setup and deploy accept `--env-file PATH`. Use `pnpm run` when passing script options, and add a `--` separator when selecting an environment file: `pnpm run setup -- --env-file .env.production` or `pnpm run deploy -- --dry-run --env-file .env.production`. The separator prevents pnpm from interpreting `--env-file` as a Node startup option. Bare `pnpm setup` and `pnpm deploy` run this project's scripts with no arguments. The scripts use the top-level Wrangler configuration; named `CLOUDFLARE_ENV` environments are rejected.
 
 SES identity verification, DNS records, configuration-set event delivery and SNS subscription confirmation remain manual Cloudflare/AWS setup steps. The setup command does not make SES or DNS changes.
+
+### Optional GitHub CI/CD
+
+Checks run on pushes to `main` and pull requests. Automatic deployment is **off by default**, so a new fork needs no Cloudflare secrets to run checks. After enabling deployment, successful checks on `main` publish production; same-repository pull requests get Cloudflare Preview URLs, and closing the pull request removes its Preview.
+
+Create separate preview resources and credentials, then upload the private settings to GitHub:
+
+```sh
+pnpm run setup -- --environment preview --env-file .env.preview --name mailcheap-preview
+pnpm run setup:ci -- --repo YOUR-OWNER/YOUR-REPO --production-file .env --preview-file .env.preview
+```
+
+The helper stores `MAILCHEAP_ENV` and `CLOUDFLARE_API_TOKEN` in separate GitHub `production` and `preview` environments. Previews share dedicated test resources, with email sending disabled. Production and preview environment files cannot be used interchangeably.
+
+Use `pnpm run setup:ci -- --repo YOUR-OWNER/YOUR-REPO --disable` to stop automatic deployment, or `--disable-ci` to skip checks too. See [the deployment guide](docs/deployment.md) for token permissions, required secrets, enable/disable controls, custom domains, preview limitations and manual commands.
 
 ### Amazon SES setup
 
@@ -181,6 +198,8 @@ For local simulation, set `LOCAL_TRANSACTIONAL_EMAIL_ENABLED=true` and a `TRANSA
 | `TRANSACTIONAL_EMAIL_FROM` | One bare sender address on a domain onboarded to Cloudflare Email Sending |
 | `LOCAL_TRANSACTIONAL_EMAIL_ENABLED` | Local simulation switch, independent of production; default `false` |
 | `CLOUDFLARE_ACCOUNT_ID`, `WORKER_NAME` | Cloudflare account and Worker to reuse or create |
+| `DEPLOYMENT_ENVIRONMENT` | `production` (default) or `preview`; setup records the selected mode |
+| `CUSTOM_DOMAIN` | Optional production hostname; its DNS zone must already be active in Cloudflare |
 | `D1_DATABASE_ID`, `D1_DATABASE_NAME` | D1 database to reuse or create |
 | `R2_ENABLED`, `R2_BUCKET_NAME` | Optional R2 storage; enabled by default |
 | `EMAIL_QUEUE_NAME`, `EMAIL_DEAD_LETTER_QUEUE_NAME` | Queue resources to reuse or create |

@@ -14,6 +14,8 @@
     "start": "wrangler dev --config dist/server/wrangler.json --persist-to .wrangler/state",
     "preview": "wrangler dev --config dist/server/wrangler.json --persist-to .wrangler/state",
     "deploy": "node -- scripts/deploy.mjs",
+    "preview:deploy": "node -- scripts/preview.mjs",
+    "setup:ci": "node -- scripts/setup-ci.mjs",
     "lint": "eslint",
     "test": "node --test --test-concurrency=1 \"tests/*.test.mjs\"",
     "check:cloudflare": "node scripts/check-cloudflare.mjs",

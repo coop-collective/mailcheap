@@ -9,7 +9,7 @@ import { readCloudflareAuth, provisionCloudflare } from './setup-cloudflare.mjs'
 const root = fileURLToPath(new URL('..', import.meta.url));
 const { values: flags } = parseArgs({ args: process.argv.slice(process.argv[2] === '--' ? 3 : 2), options: {
   local: { type: 'boolean' }, cloudflare: { type: 'boolean' }, email: { type: 'string' }, account: { type: 'string' }, name: { type: 'string' },
-  'app-url': { type: 'string' }, 'skip-r2': { type: 'boolean' }, 'env-file': { type: 'string' }, help: { type: 'boolean' },
+  'app-url': { type: 'string' }, 'skip-r2': { type: 'boolean' }, 'env-file': { type: 'string' }, environment: { type: 'string' }, help: { type: 'boolean' },
 } });
 
 async function ask(question, fallback) {
@@ -30,7 +30,7 @@ async function migrateLocal(config, values) {
 
 async function main() {
   if (flags.help) {
-    console.log('pnpm setup\npnpm run setup -- [--email you@example.com] [--env-file .env]\npnpm run setup --local\n\nGuided setup reads private .env overrides, creates/reuses Cloudflare D1, R2 and\nqueues, and saves their IDs/names to .env. Public wrangler.jsonc stays unchanged.\n--local skips Cloudflare login and provisioning. Both modes generate missing\nlogin/signing secrets and apply local migrations. Run pnpm deploy to publish.\nOptional: --account ID --name NAME --app-url https://mail.example.com --skip-r2\nUse pnpm run when passing options, so pnpm forwards them to the script.\nNo setup command enables sending or changes AWS.');
+    console.log('pnpm setup\npnpm run setup -- [--email you@example.com] [--env-file .env]\npnpm run setup --local\n\nGuided setup reads private .env overrides, creates/reuses Cloudflare D1, R2 and\nqueues, and saves their IDs/names to .env. Public wrangler.jsonc stays unchanged.\n--local skips Cloudflare login and provisioning. Both modes generate missing\nlogin/signing secrets and apply local migrations. Run pnpm deploy to publish.\nOptional: --account ID --name NAME --app-url https://mail.example.com --skip-r2\nPreview resources: --environment preview --env-file .env.preview --name mailcheap-preview\nUse pnpm run when passing options, so pnpm forwards them to the script.\nNo setup command enables sending or changes AWS.');
     return;
   }
   if (process.env.CLOUDFLARE_ENV) throw new Error('Setup uses the top-level configuration; unset CLOUDFLARE_ENV first.');
@@ -39,10 +39,23 @@ async function main() {
   if (flags['app-url']) publicAppUrl(flags['app-url']);
   const { config: base } = readConfig(root);
   const { file, values: initial } = projectEnvironment(root, flags['env-file']);
+  const environment = flags.environment || initial.DEPLOYMENT_ENVIRONMENT || 'production';
+  if (!['production', 'preview'].includes(environment)) throw new Error('--environment must be production or preview.');
+  if (initial.DEPLOYMENT_ENVIRONMENT && initial.DEPLOYMENT_ENVIRONMENT !== environment) throw new Error('Use a separate environment file for preview and production; do not repurpose existing resource IDs.');
   const email = flags.email || initial.ADMIN_EMAIL || await ask('Admin login email (--email)');
   const defaults = Object.fromEntries(SETTING_KEYS.filter(key => initial[key] !== undefined || base.vars?.[key] !== undefined).map(key => [key, initial[key] ?? base.vars[key]]));
   const prepared = prepareEnvironment(root, { file, email, defaults });
   const values = { ...initial, ...prepared.values };
+  values.DEPLOYMENT_ENVIRONMENT = environment;
+  if (environment === 'preview') {
+    values.WORKER_NAME = flags.name || values.WORKER_NAME || `${base.name}-preview`;
+    values.SENDING_ENABLED = 'false';
+    values.TRANSACTIONAL_EMAIL_ENABLED = 'false';
+    values.LOCAL_SENDING_ENABLED = 'false';
+    values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED = 'false';
+  }
+  Object.assign(prepared.values, { DEPLOYMENT_ENVIRONMENT: environment, ...(environment === 'preview' ? { WORKER_NAME: values.WORKER_NAME, SENDING_ENABLED: 'false', TRANSACTIONAL_EMAIL_ENABLED: 'false', LOCAL_SENDING_ENABLED: 'false', LOCAL_TRANSACTIONAL_EMAIL_ENABLED: 'false' } : {}) });
+  saveEnvironment(file, prepared.values);
   if (flags.local ? values.LOCAL_TRANSACTIONAL_EMAIL_ENABLED === 'true' : values.TRANSACTIONAL_EMAIL_ENABLED === 'true') {
     console.log(`Transactional email is enabled; verify ${values.TRANSACTIONAL_EMAIL_FROM} in Cloudflare Email Service before sending.`);
   }
@@ -99,7 +112,9 @@ async function main() {
   saveEnvironment(file, { APP_URL: values.APP_URL });
   await migrateLocal(base, values);
   console.log('Setup complete. Resource IDs and names saved to ' + path.relative(root, file) + '. App URL: ' + values.APP_URL);
-  console.log('Run pnpm deploy to build, migrate remote D1 and upload code with secrets. SES/DNS setup is described in README.md.');
+  console.log(environment === 'preview'
+    ? 'Run pnpm run preview:deploy -- --name pr-123 --env-file ' + path.relative(root, file) + ' to publish a Preview, or pnpm run setup:ci --help to configure GitHub.'
+    : 'Run pnpm deploy to build, migrate remote D1 and upload code with secrets. SES/DNS setup is described in README.md.');
 }
 
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
