@@ -10,7 +10,7 @@ Newsletter campaigns, welcome emails, custom opt-in confirmations, re-engagement
 
 ## Quick start
 
-Install Node.js 24 LTS and pnpm 11.13.0, then:
+Install Node.js 24 LTS and pnpm 11.28.8, then:
 
 ```sh
 git clone https://github.com/coop-collective/mailcheap.git
@@ -20,7 +20,7 @@ pnpm setup
 pnpm deploy
 ```
 
-If pnpm is not installed, install it with `npm install --global pnpm@11.13.0`.
+If pnpm is not installed, install it with `npm install --global pnpm@11.28.8`.
 Setup walks through your Cloudflare account and resources and generates a private
 `.env`. The repository includes only blank/example environment templates; your
 `.env`, credentials, resource IDs and generated configuration stay ignored by Git.
@@ -67,7 +67,7 @@ No KV, Durable Objects, MailerLite account, Redis or MongoDB service is required
 
 ## Local development
 
-Use Node.js 24 LTS (minimum 22.15) and pnpm 11.13.0, pinned by the package manifest.
+Use Node.js 24 LTS (minimum 22.15) and pnpm 11.28.8, pinned by the package manifest.
 
 ```sh
 pnpm install --frozen-lockfile

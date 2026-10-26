@@ -6,7 +6,7 @@ import path from 'node:path';
 const errors = [];
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const forbidden = /^(?:@aws-sdk\/|aws-sdk$|mongoose$|mongodb$|@upstash\/|@vercel\/blob$)/;
-if (pkg.packageManager !== 'pnpm@11.13.0') errors.push('package.json must pin pnpm@11.13.0');
+if (pkg.packageManager !== 'pnpm@11.28.8') errors.push('package.json must pin pnpm@11.28.8');
 function forbiddenAlias(specifier) {
   if (typeof specifier !== 'string' || !specifier.startsWith('npm:')) return false;
   let target = specifier.slice(4).replace(/^\//, '');
