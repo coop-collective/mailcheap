@@ -5,7 +5,7 @@ The parent is [`marclou/mailcheap`](https://github.com/marclou/mailcheap), branc
 `.github/upstream-sync.json`. The initial cursor is the commit this fork started
 from, `67d13b028a6ecae9ec56d49c4b2db58019217eba`.
 
-The repository uses pnpm `11.13.0` and the checked-in `pnpm-lock.yaml`; CI installs
+The repository uses pnpm `11.28.8` and the checked-in `pnpm-lock.yaml`; CI installs
 that exact pnpm version and uses frozen-lockfile installs. The public fork runs
 ordinary checks on GitHub-hosted runners. The subscription
 automation belongs in a **separate private controller repository**. The official

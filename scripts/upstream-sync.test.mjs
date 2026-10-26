@@ -101,7 +101,7 @@ test('candidate guard rejects automation edits and symlinks', t => {
 
 test('architecture guard requires pnpm lock and rejects forbidden direct, transitive and aliased providers', t => {
   const dir = fixture(t);
-  const pkg = { packageManager: 'pnpm@11.13.0', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } };
+  const pkg = { packageManager: 'pnpm@11.28.8', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } };
   write(dir, 'package.json', JSON.stringify(pkg));
   write(dir, 'pnpm-lock.yaml', pnpmLock());
   write(dir, 'wrangler.jsonc', '{ "d1_databases": [], "r2_buckets": [], "queues": {} }');
@@ -125,7 +125,7 @@ test('architecture guard requires pnpm lock and rejects forbidden direct, transi
   pkg.packageManager = 'pnpm@10.0.0';
   write(dir, 'package.json', JSON.stringify(pkg));
   assert.notEqual(guard().status, 0, 'package manager version must match the pinned installation');
-  pkg.packageManager = 'pnpm@11.13.0';
+  pkg.packageManager = 'pnpm@11.28.8';
   pkg.dependencies.mongoose = '9.0.0';
   write(dir, 'package.json', JSON.stringify(pkg));
   assert.notEqual(guard().status, 0);
@@ -162,7 +162,7 @@ test('publishing advances only the draft branch and safely reuses an orphaned br
   const remote = path.join(dir, 'remote.git');
   fs.mkdirSync(seed);
   git(seed, 'init', '-b', 'main');
-  write(seed, 'package.json', JSON.stringify({ packageManager: 'pnpm@11.13.0', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } }));
+  write(seed, 'package.json', JSON.stringify({ packageManager: 'pnpm@11.28.8', dependencies: { vinext: '1.1.0' }, scripts: { build: 'vite build' } }));
   write(seed, 'pnpm-lock.yaml', pnpmLock());
   write(seed, 'wrangler.jsonc', '{ "d1_databases": [], "r2_buckets": [], "queues": {} }');
   write(seed, 'lib/feature.js', 'export const value = 1;\n');
