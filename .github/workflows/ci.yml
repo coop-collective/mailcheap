@@ -14,7 +14,8 @@ permissions:
 jobs:
   check:
     if: vars.MAILCHEAP_CI_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    # The repository variable opts main checks into the Engine Box pilot.
+    runs-on: ${{ vars.ENGINEBOX_CI_ENABLED == 'true' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted", "Linux", "X64", "enginebox-linux"]') || 'ubuntu-latest' }}
     timeout-minutes: 20
     concurrency:
       group: checks-${{ github.ref }}
